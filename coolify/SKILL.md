@@ -17,6 +17,11 @@ Use for Coolify API operations. Trigger phrases: "coolify status", "deploy app",
 
 `~/.ai-pro-skills/coolify`
 
+## Shared environment (see AI-Skills README)
+
+- **Python**: run through the shared venv — `~/.ai-pro-skills/.venv/bin/python coolify.py …` (stdlib-only; if deps are ever added, install once with `~/.ai-pro-skills/install.sh pip init .`). Do not create a per-skill venv.
+- **Config**: this skill keeps its **own** `config.json` — placed **next to the installed `SKILL.md`** (the chosen client's skill folder: `~/.cursor/skills/…`, `./.cursor/skills/…` for a project, `$HERMES_HOME/.../…`, etc.), exactly where a `.env` would go. Override with `COOLIFY_CONFIG_PATH` if needed. Never commit the Bearer token.
+
 ## Slash commands
 
 | Slash | CLI | Description |
@@ -35,8 +40,8 @@ Use for Coolify API operations. Trigger phrases: "coolify status", "deploy app",
 ## How to run
 
 1. `cd ~/.ai-pro-skills/coolify`.
-2. Ensure `config.json` (or `COOLIFY_CONFIG_PATH`) with instances + app UUID map — see `config.example.json`.
-3. Run the CLI for the slash command; return output.
+2. Ensure `config.json` **next to the installed `SKILL.md`** with instances + app UUID map — see `config.example.json`; `COOLIFY_CONFIG_PATH` overrides.
+3. Run the CLI with the shared interpreter: `~/.ai-pro-skills/.venv/bin/python coolify.py <cmd>`; return output.
 
 ## Notes
 

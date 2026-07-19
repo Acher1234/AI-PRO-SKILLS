@@ -7,6 +7,7 @@ from typing import Any
 from zscaler.zia.dedicated_ip_gateways import DedicatedIPGatewaysAPI
 from zscaler.oneapi_client import LegacyZIAClient
 from zscaler.zia.forwarding_control import ForwardingControlAPI
+from zscaler.zia.url_filtering import URLFilteringAPI
 # --- Zscaler URL-category rules (whitelisting) -----------------------------
 URL_MAX_LENGTH = 1024
 DOMAIN_MAX_LENGTH = 255
@@ -367,6 +368,405 @@ def remove_urls_from_category(
         if err:
             raise RuntimeError(f"Failed to remove URLs from category {cid}: {err}")
         return updated.as_dict() if hasattr(updated, "as_dict") else dict(updated)
+
+
+# --- URL Filtering Policy --------------------------------------------------
+URL_FILTERING_ACTIONS = (
+    "ALLOW",
+    "BLOCK",
+    "CAUTION",
+    "ICAP_RESPONSE",
+    "NONE",
+    "ANY",
+)
+URL_FILTERING_REQUEST_METHODS = (
+    "CONNECT",
+    "DELETE",
+    "GET",
+    "HEAD",
+    "OPTIONS",
+    "OTHER",
+    "POST",
+    "PUT",
+    "TRACE",
+)
+URL_FILTERING_DEFAULT_PROTOCOLS = ("ANY_RULE",)
+URL_FILTERING_DEFAULT_DEVICE_TRUST_LEVELS = (
+    "UNKNOWN_DEVICETRUSTLEVEL",
+    "LOW_TRUST",
+    "MEDIUM_TRUST",
+    "HIGH_TRUST",
+)
+URL_FILTERING_DEFAULT_USER_AGENT_TYPES = (
+    "OPERA",
+    "FIREFOX",
+    "MSIE",
+    "MSEDGE",
+    "CHROME",
+    "SAFARI",
+    "MSCHREDGE",
+    "OTHER",
+)
+
+
+def _url_filtering_api(client: Any) -> Any:
+    """Return URLFilteringAPI (Legacy helper may lack the property)."""
+    zia_svc = client.zia
+    if hasattr(zia_svc, "url_filtering"):
+        return zia_svc.url_filtering
+    return URLFilteringAPI(zia_svc.request_executor)
+
+
+def _entity_ids(entities: Any) -> list[int]:
+    """Extract integer IDs from ZIA entity dicts or raw id values."""
+    ids: list[int] = []
+    seen: set[int] = set()
+    for entity in entities or []:
+        if isinstance(entity, dict):
+            raw = entity.get("id")
+        else:
+            raw = entity
+        if raw in (None, "", 0, "0"):
+            continue
+        eid = int(raw)
+        if eid not in seen:
+            seen.add(eid)
+            ids.append(eid)
+    return ids
+
+
+def _normalize_request_methods(methods: list[str] | None) -> list[str]:
+    if not methods:
+        return list(URL_FILTERING_REQUEST_METHODS)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for method in methods:
+        text = str(method or "").strip().upper()
+        if not text:
+            continue
+        if text not in URL_FILTERING_REQUEST_METHODS:
+            raise ValueError(
+                f"request_method invalide: {method!r}. "
+                f"Supportés: {', '.join(URL_FILTERING_REQUEST_METHODS)}"
+            )
+        if text not in seen:
+            seen.add(text)
+            normalized.append(text)
+    if not normalized:
+        raise ValueError("Au moins un request_method valide est requis")
+    return normalized
+
+
+def _normalize_url_filtering_action(action: str) -> str:
+    text = (action or "").strip().upper()
+    if text not in URL_FILTERING_ACTIONS:
+        raise ValueError(
+            f"action invalide: {action!r}. "
+            f"Supportées: {', '.join(URL_FILTERING_ACTIONS)}"
+        )
+    return text
+
+
+def resolve_user_ids(
+    zia_cfg: dict[str, Any],
+    *,
+    user_ids: list[int | str] | None = None,
+    usernames: list[str] | None = None,
+) -> list[int]:
+    """Resolve user IDs and/or usernames/emails to integer ZIA user IDs."""
+    resolved: list[int] = []
+    seen: set[int] = set()
+
+    for uid in user_ids or []:
+        uid_int = int(uid)
+        if uid_int not in seen:
+            seen.add(uid_int)
+            resolved.append(uid_int)
+
+    for name in usernames or []:
+        user = get_user_by_username(zia_cfg, name)
+        uid_int = int(user["id"])
+        if uid_int not in seen:
+            seen.add(uid_int)
+            resolved.append(uid_int)
+
+    return resolved
+
+
+def list_url_filtering_rules(
+    zia_cfg: dict[str, Any],
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    """List ZIA URL Filtering Policy rules (optional name search)."""
+    with get_client(zia_cfg) as client:
+        rules, _, err = _url_filtering_api(client).list_rules()
+        if err:
+            raise RuntimeError(f"Failed to list URL filtering rules: {err}")
+        result = [_to_dict(r) for r in (rules or [])]
+
+    if search and search.strip():
+        needle = search.strip().casefold()
+        result = [
+            r
+            for r in result
+            if needle in str(r.get("name") or "").casefold()
+            or needle == str(r.get("id") or "").casefold()
+        ]
+    return result
+
+
+def get_url_filtering_rule(
+    zia_cfg: dict[str, Any],
+    *,
+    rule_id: int | str | None = None,
+    rule_name: str | None = None,
+) -> dict[str, Any]:
+    """Get a URL Filtering Policy rule by ID or exact name."""
+    if rule_id is not None and str(rule_id).strip():
+        with get_client(zia_cfg) as client:
+            rule, _, err = _url_filtering_api(client).get_rule(int(rule_id))
+            if err:
+                raise RuntimeError(f"Failed to get URL filtering rule {rule_id}: {err}")
+            if rule is None:
+                raise RuntimeError(f"URL filtering rule introuvable: {rule_id}")
+            return _to_dict(rule)
+
+    if not rule_name or not rule_name.strip():
+        raise ValueError("rule_id ou rule_name requis")
+
+    needle = rule_name.strip().casefold()
+    matches = [
+        r
+        for r in list_url_filtering_rules(zia_cfg, search=rule_name)
+        if str(r.get("name") or "").casefold() == needle
+    ]
+    if not matches:
+        matches = [
+            r
+            for r in list_url_filtering_rules(zia_cfg)
+            if str(r.get("name") or "").casefold() == needle
+        ]
+    if not matches:
+        raise RuntimeError(f"URL filtering rule introuvable: {rule_name!r}")
+    if len(matches) > 1:
+        ids = ", ".join(str(r.get("id")) for r in matches)
+        raise RuntimeError(f"Plusieurs URL filtering rules pour {rule_name!r}: {ids}")
+    return matches[0]
+
+
+def _url_filtering_payload_from_current(current: dict[str, Any]) -> dict[str, Any]:
+    """Build an update/create-style kwargs payload from an existing rule dict."""
+    payload: dict[str, Any] = {
+        "name": current.get("name"),
+        "order": current.get("order"),
+        "rank": current.get("rank") if current.get("rank") is not None else 7,
+        "state": current.get("state") or "ENABLED",
+        "action": current.get("action"),
+        "protocols": current.get("protocols") or list(URL_FILTERING_DEFAULT_PROTOCOLS),
+        "url_categories": current.get("url_categories") or [],
+        "request_methods": current.get("request_methods")
+        or list(URL_FILTERING_REQUEST_METHODS),
+    }
+    if current.get("description") is not None:
+        payload["description"] = current.get("description")
+    if current.get("url_categories2"):
+        payload["url_categories2"] = current.get("url_categories2")
+    if current.get("device_trust_levels"):
+        payload["device_trust_levels"] = current.get("device_trust_levels")
+    if current.get("user_agent_types"):
+        payload["user_agent_types"] = current.get("user_agent_types")
+    if "block_override" in current:
+        payload["block_override"] = bool(current.get("block_override"))
+    if "ciparule" in current:
+        payload["ciparule"] = bool(current.get("ciparule"))
+
+    groups = _entity_ids(current.get("groups"))
+    if groups:
+        payload["groups"] = groups
+    users = _entity_ids(current.get("users"))
+    if users:
+        payload["users"] = users
+    departments = _entity_ids(current.get("departments"))
+    if departments:
+        payload["departments"] = departments
+    return payload
+
+
+def create_url_filtering_rule(
+    zia_cfg: dict[str, Any],
+    name: str,
+    *,
+    action: str,
+    url_category_ids: list[str] | None = None,
+    url_category_names: list[str] | None = None,
+    request_methods: list[str] | None = None,
+    group_ids: list[int | str] | None = None,
+    group_names: list[str] | None = None,
+    user_ids: list[int | str] | None = None,
+    usernames: list[str] | None = None,
+    order: int | None = None,
+    rank: int = 7,
+    state: str = "ENABLED",
+    description: str | None = None,
+    protocols: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Create a ZIA URL Filtering Policy rule.
+
+    Updatable fields (also on create): URL categories, request methods,
+    groups/users, rule number (``order``), and ``action``.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("name requis")
+
+    state_norm = (state or "ENABLED").strip().upper()
+    if state_norm not in ("ENABLED", "DISABLED"):
+        raise ValueError("state doit être ENABLED ou DISABLED")
+
+    categories = resolve_url_category_ids(
+        zia_cfg, category_ids=url_category_ids, category_names=url_category_names
+    )
+    if not categories:
+        raise ValueError(
+            "Au moins une URL category est requise "
+            "(--category-id / --category-name)"
+        )
+
+    kwargs: dict[str, Any] = {
+        "name": name,
+        "action": _normalize_url_filtering_action(action),
+        "state": state_norm,
+        "rank": int(rank),
+        "url_categories": categories,
+        "request_methods": _normalize_request_methods(request_methods),
+        "protocols": [
+            str(p).strip().upper()
+            for p in (protocols or list(URL_FILTERING_DEFAULT_PROTOCOLS))
+            if str(p).strip()
+        ]
+        or list(URL_FILTERING_DEFAULT_PROTOCOLS),
+        "device_trust_levels": list(URL_FILTERING_DEFAULT_DEVICE_TRUST_LEVELS),
+        "user_agent_types": list(URL_FILTERING_DEFAULT_USER_AGENT_TYPES),
+    }
+    if description:
+        kwargs["description"] = description
+    if order is not None:
+        kwargs["order"] = int(order)
+
+    if group_ids or group_names:
+        groups = resolve_group_ids(zia_cfg, group_ids=group_ids, group_names=group_names)
+        kwargs["groups"] = [g["id"] for g in groups]
+
+    if user_ids or usernames:
+        users = resolve_user_ids(zia_cfg, user_ids=user_ids, usernames=usernames)
+        if users:
+            kwargs["users"] = users
+
+    with get_client(zia_cfg) as client:
+        created, _, err = _url_filtering_api(client).add_rule(**kwargs)
+        if err:
+            raise RuntimeError(f"Failed to create URL filtering rule {name!r}: {err}")
+        return _to_dict(created)
+
+
+def update_url_filtering_rule(
+    zia_cfg: dict[str, Any],
+    *,
+    rule_id: int | str | None = None,
+    rule_name: str | None = None,
+    name: str | None = None,
+    action: str | None = None,
+    url_category_ids: list[str] | None = None,
+    url_category_names: list[str] | None = None,
+    request_methods: list[str] | None = None,
+    group_ids: list[int | str] | None = None,
+    group_names: list[str] | None = None,
+    user_ids: list[int | str] | None = None,
+    usernames: list[str] | None = None,
+    order: int | None = None,
+    rank: int | None = None,
+    state: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """
+    Update a URL Filtering Policy rule.
+
+    Supported updates: URL categories, request methods, groups, users,
+    rule number (``order``), action — plus name/state/description/rank.
+    Unspecified fields are preserved from the current rule.
+    """
+    current = get_url_filtering_rule(zia_cfg, rule_id=rule_id, rule_name=rule_name)
+    rid = current["id"]
+    kwargs = _url_filtering_payload_from_current(current)
+
+    if name is not None and str(name).strip():
+        kwargs["name"] = str(name).strip()
+    if action is not None:
+        kwargs["action"] = _normalize_url_filtering_action(action)
+    if order is not None:
+        kwargs["order"] = int(order)
+    if rank is not None:
+        kwargs["rank"] = int(rank)
+    if state is not None:
+        state_norm = state.strip().upper()
+        if state_norm not in ("ENABLED", "DISABLED"):
+            raise ValueError("state doit être ENABLED ou DISABLED")
+        kwargs["state"] = state_norm
+    if description is not None:
+        kwargs["description"] = description
+    if request_methods is not None:
+        kwargs["request_methods"] = _normalize_request_methods(request_methods)
+
+    if url_category_ids is not None or url_category_names is not None:
+        categories = resolve_url_category_ids(
+            zia_cfg, category_ids=url_category_ids, category_names=url_category_names
+        )
+        if not categories:
+            raise ValueError(
+                "Au moins une URL category est requise pour remplacer url_categories"
+            )
+        kwargs["url_categories"] = categories
+
+    if group_ids is not None or group_names is not None:
+        if not group_ids and not group_names:
+            kwargs.pop("groups", None)
+        else:
+            groups = resolve_group_ids(
+                zia_cfg, group_ids=group_ids or [], group_names=group_names or []
+            )
+            kwargs["groups"] = [g["id"] for g in groups]
+
+    if user_ids is not None or usernames is not None:
+        users = resolve_user_ids(
+            zia_cfg, user_ids=user_ids or [], usernames=usernames or []
+        )
+        if users:
+            kwargs["users"] = users
+        else:
+            kwargs.pop("users", None)
+
+    with get_client(zia_cfg) as client:
+        updated, _, err = _url_filtering_api(client).update_rule(str(rid), **kwargs)
+        if err:
+            raise RuntimeError(f"Failed to update URL filtering rule {rid}: {err}")
+        return _to_dict(updated)
+
+
+def delete_url_filtering_rule(
+    zia_cfg: dict[str, Any],
+    *,
+    rule_id: int | str | None = None,
+    rule_name: str | None = None,
+) -> dict[str, Any]:
+    """Delete a URL Filtering Policy rule by ID or name."""
+    current = get_url_filtering_rule(zia_cfg, rule_id=rule_id, rule_name=rule_name)
+    rid = current["id"]
+    with get_client(zia_cfg) as client:
+        _, _, err = _url_filtering_api(client).delete_rule(str(rid))
+        if err:
+            raise RuntimeError(f"Failed to delete URL filtering rule {rid}: {err}")
+    return {"deleted": True, "id": rid, "name": current.get("name")}
 
 
 # --- Forwarding Control / Dedicated IP -------------------------------------

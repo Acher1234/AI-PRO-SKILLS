@@ -244,6 +244,74 @@ def cmd_zia(args: argparse.Namespace) -> int:
                 category_name=category_name,
             )
         )
+    elif args.action == "url-filtering-rules":
+        _print_json(zia.list_url_filtering_rules(zia_cfg, search=args.search))
+    elif args.action == "get-url-filtering-rule":
+        if not args.rule_id and not args.rule_name:
+            raise ValueError("--rule-id ou --rule-name requis")
+        _print_json(
+            zia.get_url_filtering_rule(
+                zia_cfg, rule_id=args.rule_id, rule_name=args.rule_name
+            )
+        )
+    elif args.action == "create-url-filtering-rule":
+        if not args.name:
+            raise ValueError("--name requis pour create-url-filtering-rule")
+        if not args.filter_action:
+            raise ValueError("--filter-action requis (ALLOW|BLOCK|CAUTION|…)")
+        if not args.category_id_list and not args.category_name_list:
+            raise ValueError(
+                "--category-id ou --category-name requis pour create-url-filtering-rule"
+            )
+        _print_json(
+            zia.create_url_filtering_rule(
+                zia_cfg,
+                args.name,
+                action=args.filter_action,
+                url_category_ids=args.category_id_list or None,
+                url_category_names=args.category_name_list or None,
+                request_methods=args.request_method or None,
+                group_ids=args.group_id or None,
+                group_names=args.group_name or None,
+                user_ids=args.rule_user_id or None,
+                usernames=args.rule_username or None,
+                order=args.order,
+                rank=args.rank if args.rank is not None else 7,
+                state=args.state or "ENABLED",
+                description=args.description,
+            )
+        )
+    elif args.action == "update-url-filtering-rule":
+        if not args.rule_id and not args.rule_name:
+            raise ValueError("--rule-id ou --rule-name requis")
+        _print_json(
+            zia.update_url_filtering_rule(
+                zia_cfg,
+                rule_id=args.rule_id,
+                rule_name=args.rule_name,
+                name=args.name,
+                action=args.filter_action,
+                url_category_ids=args.category_id_list or None,
+                url_category_names=args.category_name_list or None,
+                request_methods=args.request_method or None,
+                group_ids=args.group_id or None,
+                group_names=args.group_name or None,
+                user_ids=args.rule_user_id or None,
+                usernames=args.rule_username or None,
+                order=args.order,
+                rank=args.rank,
+                state=args.state,
+                description=args.description,
+            )
+        )
+    elif args.action == "delete-url-filtering-rule":
+        if not args.rule_id and not args.rule_name:
+            raise ValueError("--rule-id ou --rule-name requis")
+        _print_json(
+            zia.delete_url_filtering_rule(
+                zia_cfg, rule_id=args.rule_id, rule_name=args.rule_name
+            )
+        )
     elif args.action == "forwarding-rules":
         _print_json(zia.list_forwarding_rules(zia_cfg, search=args.search))
     elif args.action == "get-forwarding-rule":
@@ -278,7 +346,7 @@ def cmd_zia(args: argparse.Namespace) -> int:
                 dest_ip_group_names=args.dest_ip_group_name or None,
                 description=args.description,
                 order=args.order,
-                rank=args.rank,
+                rank=args.rank if args.rank is not None else 7,
                 state=args.state or "ENABLED",
             )
         )
@@ -475,6 +543,11 @@ def build_parser() -> argparse.ArgumentParser:
             "create-url-category",
             "add-url",
             "remove-url",
+            "url-filtering-rules",
+            "get-url-filtering-rule",
+            "create-url-filtering-rule",
+            "update-url-filtering-rule",
+            "delete-url-filtering-rule",
             "forwarding-rules",
             "get-forwarding-rule",
             "create-forwarding-rule",
@@ -530,30 +603,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--search",
         type=str,
         default=None,
-        help="Filtre recherche (forwarding-rules / departments / ip-groups)",
+        help="Filtre recherche (forwarding/url-filtering rules / departments / ip-groups)",
     )
     p_zia.add_argument(
         "--group-id",
         action="append",
         default=[],
-        help="ID groupe ZIA (répétable ; set-groups / create-forwarding-rule)",
+        help="ID groupe ZIA (répétable ; set-groups / forwarding / url-filtering)",
     )
     p_zia.add_argument(
         "--group-name",
         action="append",
         default=[],
-        help="Nom groupe ZIA (répétable ; set-groups / create-forwarding-rule)",
+        help="Nom groupe ZIA (répétable ; set-groups / forwarding / url-filtering)",
     )
     p_zia.add_argument(
         "--name",
         type=str,
-        help="Nom (URL category / forwarding rule / IP group)",
+        help="Nom (URL category / filtering|forwarding rule / IP group)",
     )
     p_zia.add_argument(
         "--description",
         type=str,
         default=None,
-        help="Description (create-url-category / create-forwarding-rule / IP groups)",
+        help="Description (URL category / filtering|forwarding rule / IP groups)",
     )
     p_zia.add_argument(
         "--super-category",
@@ -566,14 +639,39 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         dest="category_id_list",
-        help="ID catégorie URL (ex: CUSTOM_01, répétable ; create-forwarding-rule / add-url)",
+        help="ID catégorie URL (ex: CUSTOM_01, répétable ; filtering/forwarding / add-url)",
     )
     p_zia.add_argument(
         "--category-name",
         action="append",
         default=[],
         dest="category_name_list",
-        help="Nom configuré de la catégorie URL (répétable ; create-forwarding-rule / add-url)",
+        help="Nom configuré de la catégorie URL (répétable ; filtering/forwarding / add-url)",
+    )
+    p_zia.add_argument(
+        "--filter-action",
+        type=str,
+        default=None,
+        choices=list(zia.URL_FILTERING_ACTIONS),
+        help="Action URL filtering (ALLOW|BLOCK|CAUTION|ICAP_RESPONSE|NONE|ANY)",
+    )
+    p_zia.add_argument(
+        "--request-method",
+        action="append",
+        default=[],
+        help="HTTP request method pour URL filtering (répétable ; GET, POST, …)",
+    )
+    p_zia.add_argument(
+        "--rule-user-id",
+        action="append",
+        default=[],
+        help="ID user ZIA pour une URL filtering rule (répétable)",
+    )
+    p_zia.add_argument(
+        "--rule-username",
+        action="append",
+        default=[],
+        help="Nom/email user ZIA pour une URL filtering rule (répétable)",
     )
     p_zia.add_argument(
         "--url",
@@ -653,13 +751,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--rule-id",
         type=str,
         default=None,
-        help="ID d'une forwarding rule (get/delete)",
+        help="ID d'une forwarding / URL filtering rule (get/update/delete)",
     )
     p_zia.add_argument(
         "--rule-name",
         type=str,
         default=None,
-        help="Nom d'une forwarding rule (get/delete)",
+        help="Nom d'une forwarding / URL filtering rule (get/update/delete)",
     )
     p_zia.add_argument(
         "--forward-method",
@@ -702,20 +800,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--order",
         type=int,
         default=None,
-        help="Ordre de la forwarding rule",
+        help="Numéro/ordre de règle (forwarding ou URL filtering)",
     )
     p_zia.add_argument(
         "--rank",
         type=int,
-        default=7,
-        help="Admin rank de la forwarding rule (1-7, défaut: 7)",
+        default=None,
+        help="Admin rank (1-7 ; défaut create: 7)",
     )
     p_zia.add_argument(
         "--state",
         type=str,
-        default="ENABLED",
+        default=None,
         choices=["ENABLED", "DISABLED"],
-        help="État de la forwarding rule (défaut: ENABLED)",
+        help="État ENABLED/DISABLED (défaut create: ENABLED)",
     )
     p_zia.set_defaults(func=cmd_zia)
 

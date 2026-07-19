@@ -1,71 +1,113 @@
+<div align="center">
+
+<img src="assets/logo.png" alt="AI-PRO-SKILLS" width="640" />
+
 # 🧰 AI-PRO-SKILLS
 
-> Professional / ops CLI skills for Cursor & Hermes (Coolify, Zscaler, agent-browser, Google Workspace, PowerPoint, …).  
-> Standalone repository — not a nested copy of [AI-Skills](https://github.com/Acher1234/AI-Skills).
+**Skills CLI _pro / ops_ pour agents IA — installables sur Cursor · Claude · Hermes · OpenClaw.**
 
-Repo: [github.com/Acher1234/AI-PRO-SKILLS](https://github.com/Acher1234/AI-PRO-SKILLS.git)
+*by Hermes* · dépôt **standalone** · [github.com/Acher1234/AI-PRO-SKILLS](https://github.com/Acher1234/AI-PRO-SKILLS.git)
 
-## 📁 Structure
+</div>
+
+> Dépôt **standalone** (pas une copie imbriquée de [AI-Skills](https://github.com/Acher1234/AI-Skills)).
+
+## 🧭 C'est quoi ?
+
+Une collection de _skills_ pro (Coolify, Zscaler, agent-browser, Salesforce, Jira, Google
+Workspace, PowerPoint) + un **méta-installeur** (`ai-pro-skills`) qui les enregistre dans
+n'importe quel outil.
+
+Même principe qu'AI-Skills : **une librairie partagée + un env Python/npm partagé** sur la
+machine. On **ne re-clone pas** et on **ne réinstalle pas** les dépendances à chaque projet.
+
+| | |
+|---|---|
+| 🎯 **Multi-cibles** | Cursor · Claude · Hermes · OpenClaw *(Claude & OpenClaw en cours)* |
+| 🌐 **Skills externes** | Installe **n'importe quel** repo git de skill |
+| ♻️ **Env partagé** | Un venv Python (`~/.ai-pro-skills/.venv`) + npm global ; **chaque skill y installe ses propres deps** (une fois, pas par projet) |
+| 📦 **Cache partagé** | Repos externes clonés **une fois** dans `~/.ai-pro-skills/ext/` |
+
+## 🏛️ Architecture
 
 ```
-AI-PRO-SKILLS/
-├── README.md               ← This file
-├── SKILL.md                ← Cursor install prompt (default → ~/.ai-pro-skills)
-├── SKILL_TEMPLATE.md       ← How to add a new skill
-├── coolify/                ← Coolify deploy / status / restart CLI
-├── zscaler/                ← Zscaler ZPA / ZIA / ZIdentity CLI
-├── agent-browser/          ← Stub skill (CLI via npm)
-├── SF/                     ← Install/update Salesforce skills (forcedotcom/sf-skills)
-├── google-workspace/       ← Vendored: Gmail / Calendar / Drive / Docs / Sheets
-└── powerpoint/             ← Vendored: create / edit PowerPoint decks
+~/.ai-pro-skills/        librairie partagée ($AI_SKILLS_HOME)
+├── install.sh           le méta-installeur (piloté par /ai-pro-skills)
+├── ext/<repo>/          skills git externes, clonés UNE FOIS
+├── .venv/               venv Python partagé (tous les skills python)
+└── <skills>/            coolify, zscaler, agent-browser, SF, jira, …
+
+npm i -g <pkg>           CLIs node globaux partagés (agent-browser, …)
+
+        │ on ne copie QUE le SKILL.md vers chaque outil ↓
+~/.cursor/skills/<name>/SKILL.md     ~/.claude/skills/<name>/SKILL.md
+~/.hermes/skills/<name>/SKILL.md     ~/.openclaw/skills/<name>/SKILL.md
 ```
 
-> **Install :** colle le [prompt](#-install-prompt-cursor-or-hermes) ou suis [`SKILL.md`](SKILL.md). Cibles : Cursor (`~/.cursor/skills`), Hermes all (`~/.hermes/skills`), ou Hermes profile (`$HERMES_HOME/skills`).
+## 🚀 Installation
+
+```bash
+# 1. Cloner la librairie partagée (une fois)
+git clone https://github.com/Acher1234/AI-PRO-SKILLS.git ~/.ai-pro-skills
+
+# 2. Voir les 3 commandes du helper
+cd ~/.ai-pro-skills
+./install.sh --help     # fetch, pip init, npm init
+```
+
+Puis colle le prompt d'installation dans un chat **Agent**, ou lance `/ai-pro-skills`.
+Le flux : **1)** l'outil (Cursor / Claude / Hermes / OpenClaw) → **2)** la portée
+(global / projet / profil) → **3)** ce qu'on installe (URL git externe, skill intégré, ou chemin local).
+
+## 🪄 `/ai-pro-skills` — l'installeur
+
+`install.sh` a **3 commandes** : `fetch`, `pip init`, `npm init`. Enregistrer un skill dans un
+outil = un simple `cp` du `SKILL.md`.
+
+```bash
+cd ~/.ai-pro-skills
+
+# skill intégré → cp du SKILL.md vers l'outil (Cursor global)
+mkdir -p ~/.cursor/skills/coolify && cp ~/.ai-pro-skills/coolify/SKILL.md ~/.cursor/skills/coolify/SKILL.md
+
+# skill git externe → cloné une fois, puis cp
+SRC=$(./install.sh fetch https://github.com/some/pro-skill.git pro-skill)
+mkdir -p ~/.claude/skills/pro-skill && cp "$SRC/SKILL.md" ~/.claude/skills/pro-skill/SKILL.md
+
+# le skill installe SES deps tout seul (1re exécution) dans le venv partagé
+./install.sh pip init "$SRC"                    # ou, depuis le dossier du skill : ./install.sh pip init .
+```
+
+> L'installeur **ne fait pas** de `pip install` pour toi : `fetch` (clone) + `cp` (register).
+> Chaque skill installe **ses propres** dépendances via `pip init` / `npm init`, à son premier run,
+> dans le venv partagé (`~/.ai-pro-skills/.venv`) — une fois par machine.
+
+| Cible (`tool` / `scope`) | Dossier d'install |
+|--------------------------|-------------------|
+| `cursor` / `global` | `~/.cursor/skills/<name>/` |
+| `cursor` / `project` | `./.cursor/skills/<name>/` |
+| `claude` / `global` | `~/.claude/skills/<name>/` *(WIP)* |
+| `claude` / `project` | `./.claude/skills/<name>/` *(WIP)* |
+| `hermes` / `all` | `~/.hermes/skills/<name>/` |
+| `hermes` / `profile` | `${HERMES_HOME}/skills/<name>/` |
+| `openclaw` / `global` | `~/.openclaw/skills/<name>/` *(WIP)* |
+| `openclaw` / `project` | `./.openclaw/skills/<name>/` *(WIP)* |
+
+> **Claude** et **OpenClaw** sont **en cours d'implémentation** : les chemins ci-dessus sont les
+> valeurs par défaut de [`install.sh`](install.sh) (fonction `target()`) et pourront être ajustés
+> quand les conventions de ces outils seront figées.
 
 ## 📋 Skills
 
-| Skill | Description | Language / notes |
-|-------|-------------|------------------|
-| `coolify` | Coolify instances — status, deploy, restart | python |
-| `zscaler` | Zscaler admin — ZPA / ZIA / ZIdentity | python |
-| `agent-browser` | Browser automation CLI for AI agents (navigate, click, fill, screenshot, scrape) | stub + `npm i -g agent-browser` ([upstream](https://github.com/vercel-labs/agent-browser)) |
-| `sf` | Install / update Salesforce skills from [forcedotcom/sf-skills](https://github.com/forcedotcom/sf-skills.git) | sync → `~/.ai-skills/sf-skills`, copy to Cursor/Hermes |
-| `google-workspace` | Gmail, Calendar, Drive, Docs, Sheets (OAuth + CLI) | vendored from [hermes-agent](https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/google-workspace) |
-| `powerpoint` | Create / edit PowerPoint presentations | vendored from [hermes-agent](https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/powerpoint) |
-
-## 🪄 Install prompt (Cursor or Hermes)
-
-Paste into an **Agent** chat. Root [`SKILL.md`](SKILL.md) (`/ai-pro-skills`) is the same flow.
-
-> The AI must ask: **1)** Cursor / Hermes / both → **2)** if Hermes: all profiles vs this profile → **3)** which skills (including `agent-browser`, `sf`, `google-workspace`, `powerpoint`).
-
-| Target | Install directory |
-|--------|-------------------|
-| Cursor | `~/.cursor/skills/<skill>/SKILL.md` |
-| Hermes — all profiles | `~/.hermes/skills/<skill>/SKILL.md` |
-| Hermes — this profile | `${HERMES_HOME}/skills/<skill>/SKILL.md` |
-
-```
-Take the project at url: https://github.com/Acher1234/AI-PRO-SKILLS.git
-Install under ~ as .ai-pro-skills (pull if it exists).
-
-Ask: Cursor vs Hermes vs both.
-If Hermes: all profiles (~/.hermes/skills) vs this profile ($HERMES_HOME/skills).
-List skills (coolify, zscaler, agent-browser, sf, google-workspace, powerpoint) and ask which to install.
-Copy only chosen skills (+ always ai-pro-skills) into each selected destination.
-For google-workspace / powerpoint: copy the whole folder (not only SKILL.md).
-  Cursor → $DEST/<skill>/
-  Hermes → $DEST/productivity/<skill>/  (matches upstream paths)
-```
-
-| Step | Action |
-|------|--------|
-| 1 | Clone / pull `~/.ai-pro-skills` |
-| 2 | Ask **Cursor / Hermes / both** |
-| 3 | If Hermes: **all** or **this profile** |
-| 4 | List skills and ask which |
-| 5 | Copy into chosen destination(s) |
-| 6 | Reload Cursor and/or Hermes |
+| Skill | Description | Notes |
+|-------|-------------|-------|
+| `coolify` | Coolify : status / deploy / restart | python |
+| `zscaler` | Zscaler ZPA / ZIA / ZIdentity | python |
+| `agent-browser` | Automation navigateur pour agents IA | stub + `npm i -g agent-browser` ([upstream](https://github.com/vercel-labs/agent-browser)) |
+| `sf` | Installe / met à jour les skills Salesforce | sync [forcedotcom/sf-skills](https://github.com/forcedotcom/sf-skills.git) → `~/.ai-skills/sf-skills` |
+| `jira` | Installe **tous** les skills JIRA Assistant + CLI `jira-as` | `/jira` |
+| `google-workspace` | Gmail, Calendar, Drive, Docs, Sheets (OAuth + CLI) | vendored ([hermes-agent](https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/google-workspace)) |
+| `powerpoint` | Créer / éditer des présentations `.pptx` | vendored ([hermes-agent](https://github.com/NousResearch/hermes-agent/tree/main/skills/productivity/powerpoint)) |
 
 ## 📂 Working directories
 
@@ -73,64 +115,34 @@ For google-workspace / powerpoint: copy the whole folder (not only SKILL.md).
 |-------|-------------------|
 | `coolify` | `~/.ai-pro-skills/coolify` |
 | `zscaler` | `~/.ai-pro-skills/zscaler` |
-| `agent-browser` | global CLI after npm install (`agent-browser …`); stub in `~/.ai-pro-skills/agent-browser` |
-| `sf` | meta-skill in `~/.ai-pro-skills/SF`; SF skills cache: `~/.ai-skills/sf-skills/skills/{skills_dir}` |
-| `google-workspace` | `~/.ai-pro-skills/google-workspace` (scripts under `scripts/`) |
-| `powerpoint` | `~/.ai-pro-skills/powerpoint` (scripts + editing guides) |
+| `agent-browser` | CLI global après `npm i -g agent-browser` ; stub dans `~/.ai-pro-skills/agent-browser` |
+| `sf` | meta-skill dans `~/.ai-pro-skills/SF` ; cache SF : `~/.ai-skills/sf-skills/skills/{skills_dir}` |
+| `jira` | cache : `~/.ai-pro-skills/jira/JIRA-Assistant-Skills` ; CLI `jira-as` |
+| `google-workspace` | `~/.ai-pro-skills/google-workspace` (scripts sous `scripts/`) |
+| `powerpoint` | `~/.ai-pro-skills/powerpoint` |
 
-The agent must `cd` into the skill dir when running local CLIs; for `agent-browser`, prefer the global binary after `npm i -g agent-browser && agent-browser install`.
+Les skills Python doivent cibler l'interpréteur **partagé** `~/.ai-pro-skills/.venv/bin/python`.
 
-## 🧩 Create a new skill
+## 🧩 Créer un nouveau skill
 
-See **[`SKILL_TEMPLATE.md`](SKILL_TEMPLATE.md)** (structure, `SKILL.md`, slash `/{skill}_{command}`, security).
-
-## 🎯 Register skills (Cursor / Hermes)
-
-| Target | Destination |
-|--------|-------------|
-| Cursor | `~/.cursor/skills/<skill>/SKILL.md` |
-| Hermes all | `~/.hermes/skills/<skill>/SKILL.md` |
-| Hermes profile | `$HERMES_HOME/skills/<skill>/SKILL.md` |
-
-| Skill | Source under `~/.ai-pro-skills/` |
-|-------|----------------------------------|
-| `ai-pro-skills` | `SKILL.md` |
-| `coolify` | `coolify/SKILL.md` |
-| `zscaler` | `zscaler/SKILL.md` |
-| `agent-browser` | `agent-browser/SKILL.md` (+ npm install) |
-| `sf` | `SF/SKILL.md` (then `/sf` syncs into `~/.ai-skills/sf-skills`) |
-| `google-workspace` | `google-workspace/` (full tree: `SKILL.md`, `scripts/`, `references/`) |
-| `powerpoint` | `powerpoint/` (full tree: `SKILL.md`, `scripts/`, `editing.md`, `pptxgenjs.md`, …) |
-
-Use the [install prompt](#-install-prompt-cursor-or-hermes) or `/ai-pro-skills`.
+Voir **[`SKILL_TEMPLATE.md`](SKILL_TEMPLATE.md)** (structure, `SKILL.md`, slash `/{skill}_{command}`, sécurité).
 
 ## 🚀 Usage
 
-Invoke via:
-- Cursor Agent: `/coolify`, `/zscaler`, `/agent-browser`, `/sf`, `/google-workspace`, `/powerpoint`
-- Direct CLI under `~/.ai-pro-skills/<skill>/`
+Invoque via :
+- Cursor / Claude / OpenClaw Agent : `/coolify`, `/zscaler`, `/agent-browser`, `/sf`, `/jira`, `/google-workspace`, `/powerpoint`
+- CLI directe sous `~/.ai-pro-skills/<skill>/`
 - Hermes cron / shell
 
-For **agent-browser**, after Cursor install, also run once:
+Pour **agent-browser**, après install : `npm i -g agent-browser && agent-browser install`, puis
+`agent-browser skills get core` (voir [`agent-browser/README.md`](agent-browser/README.md)).
 
-```bash
-npm i -g agent-browser && agent-browser install
-```
+Pour **sf**, lance `/sf` pour sync [forcedotcom/sf-skills](https://github.com/forcedotcom/sf-skills.git) dans `~/.ai-skills/sf-skills`.
 
-Then load workflows with `agent-browser skills get core` (see [`agent-browser/README.md`](agent-browser/README.md)).
-
-For **sf**, after installing the meta-skill, run `/sf` to sync [forcedotcom/sf-skills](https://github.com/forcedotcom/sf-skills.git) into `~/.ai-skills/sf-skills` and copy chosen skills (working dir: `~/.ai-skills/sf-skills/skills/{skills_dir}`).
-
-For **google-workspace**, run setup once (see its `SKILL.md`):
-
-```bash
-python ~/.ai-pro-skills/google-workspace/scripts/setup.py --check
-```
-
-OAuth files live under `$HERMES_HOME` (`google_token.json`, `google_client_secret.json`) — never commit them.
-
-For **powerpoint**, follow its `SKILL.md` / `editing.md` / `pptxgenjs.md` under `~/.ai-pro-skills/powerpoint`.
+Pour **google-workspace**, run une fois `python ~/.ai-pro-skills/google-workspace/scripts/setup.py --check`.
+Les fichiers OAuth vivent sous `$HERMES_HOME` — **ne jamais** les committer. Garde les secrets dans le
+`.env` de l'outil (`~/.cursor/.env`, `~/.claude/.env`, `$HERMES_HOME/.env`, `~/.openclaw/.env`).
 
 ---
 
-*Standalone pro skills repo — keep in sync with Cursor via the install prompt.*
+*Dépôt pro standalone — s'installe via `/ai-pro-skills` (env partagé, multi-outils).*

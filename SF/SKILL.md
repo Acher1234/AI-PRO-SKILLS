@@ -140,9 +140,11 @@ Then for EACH selected skill (folder name = skills_dir):
   into the destination so agents can run bundled scripts. If the destination
   already exists, refresh it (rsync/cp -R) so updates replace stale files.
 
-  Ensure the installed SKILL.md documents (or the agent remembers) the working
-  directory:
+  PREPEND a shared-env header at the TOP of each installed SKILL.md (after its
+  front-matter) stating the env is shared and where the scripts live — the working
+  directory to run scripts / read references/ + assets/ from:
     ~/.ai-skills/sf-skills/skills/{skills_dir}
+  (Python skills use the shared venv ~/.ai-skills/.venv/bin/python.)
 
 Reload Cursor if Cursor was a target. For Hermes, reload/restart the agent if needed.
 ```
@@ -154,7 +156,7 @@ Reload Cursor if Cursor was a target. For Hermes, reload/restart the agent if ne
 3. Ask **Cursor / Hermes / both**.
 4. If Hermes: ask **all** vs **this profile**; resolve `HERMES_HOME` if needed.
 5. Build alphabetical index → present **by theme** (ranges + examples); ask which to install/update.
-6. Copy selected skill folders (or at least each `SKILL.md`) into every chosen destination.
+6. Copy selected skill folders (or at least each `SKILL.md`) into every chosen destination, and **prepend a shared-env header** to the top of each installed `SKILL.md` (shared env + working dir `~/.ai-skills/sf-skills/skills/{skills_dir}`) — see the snippet in "Copy map".
 7. Remind: working directory for SF skill work is `~/.ai-skills/sf-skills/skills/{skills_dir}`.
 8. Tell the user to reload Cursor and/or Hermes.
 
@@ -179,11 +181,23 @@ fi
 # List skill dirs (for indexing — show themes to the user, not this raw dump)
 ls -1 ~/.ai-skills/sf-skills/skills
 
-# Example: Cursor + one skill
+# Example: Cursor + one skill (+ prepend a shared-env / working-dir header to SKILL.md)
 SKILL_DIR=platform-apex-generate
 DEST=~/.cursor/skills
 mkdir -p "$DEST/$SKILL_DIR"
 cp -R ~/.ai-skills/sf-skills/skills/"$SKILL_DIR"/. "$DEST/$SKILL_DIR"/
+
+NOTE="> **Installed via /sf — shared environment.** Run scripts and read \`references/\`/\`assets/\` from the working directory \`~/.ai-skills/sf-skills/skills/$SKILL_DIR\` (not this stub path). Python skills use the shared venv \`~/.ai-skills/.venv/bin/python\`."
+f="$DEST/$SKILL_DIR/SKILL.md"
+if [ -f "$f" ]; then
+  awk -v note="$NOTE" '
+    NR==1 && $0=="---" {print; fm=1; next}
+    fm && $0=="---" && !done {print; print ""; print note; done=1; next}
+    {print}
+  ' "$f" > "$f.tmp"
+  grep -qF "$NOTE" "$f.tmp" || { printf "%s\n\n" "$NOTE" | cat - "$f" > "$f.tmp"; }
+  mv "$f.tmp" "$f"
+fi
 ```
 
 ## Slash commands

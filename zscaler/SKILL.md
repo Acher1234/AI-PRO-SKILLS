@@ -2,9 +2,9 @@
 name: zscaler
 description: >-
   Manage Zscaler ZPA, ZIA, and ZIdentity via the official Python SDK (users,
-  groups, URL categories, forwarding/Dedicated IP rules, IP groups, activation).
-  Use when the user mentions Zscaler, ZIA, ZPA, Dedicated IP, forwarding rules,
-  or invokes /zscaler_*.
+  groups, URL categories, URL filtering policies, forwarding/Dedicated IP rules,
+  IP groups, activation). Use when the user mentions Zscaler, ZIA, ZPA,
+  Dedicated IP, forwarding rules, URL filtering, or invokes /zscaler_*.
 disable-model-invocation: true
 ---
 
@@ -12,17 +12,19 @@ disable-model-invocation: true
 
 ## When to use
 
-Use for Zscaler admin API work. Trigger phrases: "ZIA users", "create forwarding rule", "Dedicated IP", "URL category", "activate ZIA", `/zscaler_zia_*`, `/zscaler_zpa_*`.
+Use for Zscaler admin API work. Trigger phrases: "ZIA users", "create forwarding rule", "URL filtering policy", "Dedicated IP", "URL category", "activate ZIA", `/zscaler_zia_*`, `/zscaler_zpa_*`.
 
 ## Working directory
 
 `~/.ai-pro-skills/zscaler`
 
-Prefer the local venv:
+## Shared environment (see AI-Skills README)
+
+- **Python**: run through the shared venv — `~/.ai-pro-skills/.venv/bin/python cli.py …`. Install the Zscaler SDK once into the shared venv from the skill dir: `~/.ai-pro-skills/install.sh pip init .` (installs this skill's `requirements.txt`; do not create a per-skill `.venv`).
+- **Config**: this skill keeps its **own** `config.json` — placed **next to the installed `SKILL.md`** (the chosen client's skill folder: `~/.cursor/skills/…`, `./.cursor/skills/…` for a project, `$HERMES_HOME/.../…`, etc.), exactly where a `.env` would go. Generate it there with `/zscaler_setup`. Never commit real tokens.
 
 ```bash
-source .venv/bin/activate   # if present
-python cli.py …
+~/.ai-pro-skills/.venv/bin/python cli.py test
 ```
 
 ## Slash commands
@@ -66,6 +68,33 @@ python cli.py …
 | `/zscaler_zia_create-url-category` | `python cli.py zia create-url-category --name N --url …` | Create category |
 | `/zscaler_zia_add-url` | `python cli.py zia add-url --category-name N --url …` | Add URLs |
 | `/zscaler_zia_remove-url` | `python cli.py zia remove-url --category-name N --url …` | Remove URLs |
+
+### ZIA — URL filtering policies
+
+| Slash | CLI | Description |
+|-------|-----|-------------|
+| `/zscaler_zia_url-filtering-rules` | `python cli.py zia url-filtering-rules [--search T]` | List rules |
+| `/zscaler_zia_get-url-filtering-rule` | `python cli.py zia get-url-filtering-rule --rule-name N` | Get rule |
+| `/zscaler_zia_create-url-filtering-rule` | `python cli.py zia create-url-filtering-rule …` | Create rule |
+| `/zscaler_zia_update-url-filtering-rule` | `python cli.py zia update-url-filtering-rule …` | Update rule |
+| `/zscaler_zia_delete-url-filtering-rule` | `python cli.py zia delete-url-filtering-rule …` | Delete rule |
+
+Updatable fields: `--category-id`/`--category-name`, `--request-method`, `--group-id`/`--group-name`, `--rule-user-id`/`--rule-username`, `--order` (rule number), `--filter-action`.
+
+```bash
+python cli.py zia create-url-filtering-rule \
+  --name "Block Adult" \
+  --filter-action BLOCK \
+  --category-id OTHER_ADULT_MATERIAL \
+  --group-name "Vo2 - Canada" \
+  --order 5
+
+python cli.py zia update-url-filtering-rule \
+  --rule-name "Block Adult" \
+  --filter-action ALLOW \
+  --request-method GET --request-method POST \
+  --order 3
+```
 
 ### ZIA — forwarding / Dedicated IP
 
@@ -111,9 +140,9 @@ python cli.py zia create-forwarding-rule \
 
 ## How to run
 
-1. `cd ~/.ai-pro-skills/zscaler`; activate `.venv` if present.
-2. Ensure `config.json` (from `config.example.json`) or run `/zscaler_setup`.
-3. Map `/{skill}_{product}_{action}` to `python cli.py <product> <action> …`.
+1. `cd ~/.ai-pro-skills/zscaler`; use the shared venv (`~/.ai-pro-skills/.venv/bin/python`).
+2. Ensure `config.json` **next to the installed `SKILL.md`** (from `config.example.json`) or run `/zscaler_setup`.
+3. Map `/{skill}_{product}_{action}` to `~/.ai-pro-skills/.venv/bin/python cli.py <product> <action> …`.
 4. After ZIA create/update/delete, run `/zscaler_zia_activate` (or remind the user).
 5. Return JSON/CLI output to the user.
 

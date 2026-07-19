@@ -240,6 +240,40 @@ python cli.py zia add-url --category-name "Allowlist" --url safemarch.com
 python cli.py zia add-url --category-name "Allowlist" --url a.example.com --url .example.org
 ```
 
+### URL Filtering Policy
+
+Full CRUD for **URL Filtering Policy** rules (`/urlFilteringRules`). `get` / `update` / `delete` accept `--rule-id` or `--rule-name`.
+
+| Field | Flags | Notes |
+|-------|-------|-------|
+| URL categories | `--category-id` / `--category-name` (repeatable) | Required on create |
+| Request methods | `--request-method` (repeatable) | `GET`, `POST`, … — defaults to all methods on create |
+| Groups | `--group-id` / `--group-name` (repeatable) | User groups |
+| Users | `--rule-user-id` / `--rule-username` (repeatable) | Specific users |
+| Rule number | `--order` | Execution order in the policy |
+| Action | `--filter-action` | `ALLOW`, `BLOCK`, `CAUTION`, `ICAP_RESPONSE`, `NONE`, `ANY` |
+
+```bash
+python cli.py zia url-filtering-rules [--search "Adult"]
+python cli.py zia get-url-filtering-rule --rule-name "Block Adult"
+python cli.py zia create-url-filtering-rule \
+  --name "Block Adult" \
+  --filter-action BLOCK \
+  --category-id OTHER_ADULT_MATERIAL \
+  --group-name "Vo2 - Canada" \
+  --request-method GET --request-method POST \
+  --order 5
+# Partial update — unspecified fields are preserved
+python cli.py zia update-url-filtering-rule \
+  --rule-name "Block Adult" \
+  --filter-action ALLOW \
+  --order 3 \
+  --category-id CUSTOM_03
+python cli.py zia delete-url-filtering-rule --rule-name "Block Adult"
+```
+
+Activate after changes: `python cli.py zia activate`.
+
 ### Creating a custom URL category
 
 A category can hold **URLs**, **IP ranges** and/or **keywords**. At least **one** of `--url` / `--ip-range` / `--keyword` is required (the ZIA API rejects an empty category with `At least 1 URL or keyword should be entered`). All three flags are **repeatable**.
@@ -339,6 +373,11 @@ python cli.py zia delete-source-ip-group --ip-group-name "Corp Sources"
 | `zia url-categories` | List URL categories |
 | `zia create-url-category` | Create a URL category (`--url` / `--ip-range` / `--keyword`) |
 | `zia add-url` / `remove-url` | Add / remove URLs from a category |
+| `zia url-filtering-rules` | List URL filtering policy rules |
+| `zia get-url-filtering-rule` | Get a URL filtering rule (by id or name) |
+| `zia create-url-filtering-rule` | Create a URL filtering rule |
+| `zia update-url-filtering-rule` | Update categories / methods / groups / users / order / action |
+| `zia delete-url-filtering-rule` | Delete a URL filtering rule |
 | `zia forwarding-rules` | List forwarding rules |
 | `zia get-forwarding-rule` | Get a forwarding rule (by id or name) |
 | `zia create-forwarding-rule` | Create a forwarding rule (default: Dedicated IP / `ENATDEDIP`) |

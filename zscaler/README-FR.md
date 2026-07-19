@@ -240,6 +240,40 @@ python cli.py zia add-url --category-name "Allowlist" --url safemarch.com
 python cli.py zia add-url --category-name "Allowlist" --url a.example.com --url .example.org
 ```
 
+### URL Filtering Policy
+
+CRUD complet pour les règles de **URL Filtering Policy** (`/urlFilteringRules`). `get` / `update` / `delete` acceptent `--rule-id` ou `--rule-name`.
+
+| Champ | Flags | Notes |
+|-------|-------|-------|
+| URL categories | `--category-id` / `--category-name` (répétables) | Requis à la création |
+| Request methods | `--request-method` (répétable) | `GET`, `POST`, … — toutes les méthodes par défaut à la création |
+| Groups | `--group-id` / `--group-name` (répétables) | Groupes utilisateurs |
+| Users | `--rule-user-id` / `--rule-username` (répétables) | Utilisateurs ciblés |
+| Rule number | `--order` | Ordre d'exécution dans la policy |
+| Action | `--filter-action` | `ALLOW`, `BLOCK`, `CAUTION`, `ICAP_RESPONSE`, `NONE`, `ANY` |
+
+```bash
+python cli.py zia url-filtering-rules [--search "Adult"]
+python cli.py zia get-url-filtering-rule --rule-name "Block Adult"
+python cli.py zia create-url-filtering-rule \
+  --name "Block Adult" \
+  --filter-action BLOCK \
+  --category-id OTHER_ADULT_MATERIAL \
+  --group-name "Vo2 - Canada" \
+  --request-method GET --request-method POST \
+  --order 5
+# Update partiel — les champs non fournis sont conservés
+python cli.py zia update-url-filtering-rule \
+  --rule-name "Block Adult" \
+  --filter-action ALLOW \
+  --order 3 \
+  --category-id CUSTOM_03
+python cli.py zia delete-url-filtering-rule --rule-name "Block Adult"
+```
+
+Activer après les changements : `python cli.py zia activate`.
+
 ### Créer une catégorie d'URL custom
 
 Une catégorie peut contenir des **URLs**, des **plages IP** et/ou des **keywords**. Au moins **un** de `--url` / `--ip-range` / `--keyword` est requis (l'API ZIA refuse une catégorie vide avec `At least 1 URL or keyword should be entered`). Ces trois flags sont **répétables**.
@@ -339,6 +373,11 @@ python cli.py zia delete-source-ip-group --ip-group-name "Corp Sources"
 | `zia url-categories` | Liste les catégories d'URL |
 | `zia create-url-category` | Crée une catégorie d'URL (`--url` / `--ip-range` / `--keyword`) |
 | `zia add-url` / `remove-url` | Ajoute / retire des URLs d'une catégorie |
+| `zia url-filtering-rules` | Liste les règles URL filtering |
+| `zia get-url-filtering-rule` | Récupère une règle URL filtering (par id ou nom) |
+| `zia create-url-filtering-rule` | Crée une règle URL filtering |
+| `zia update-url-filtering-rule` | Met à jour categories / methods / groups / users / order / action |
+| `zia delete-url-filtering-rule` | Supprime une règle URL filtering |
 | `zia forwarding-rules` | Liste les forwarding rules |
 | `zia get-forwarding-rule` | Récupère une forwarding rule (par id ou nom) |
 | `zia create-forwarding-rule` | Crée une forwarding rule (défaut: Dedicated IP / `ENATDEDIP`) |
