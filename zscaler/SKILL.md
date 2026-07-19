@@ -2,9 +2,10 @@
 name: zscaler
 description: >-
   Manage Zscaler ZPA, ZIA, and ZIdentity via the official Python SDK (users,
-  groups, URL categories, URL filtering policies, forwarding/Dedicated IP rules,
-  IP groups, activation). Use when the user mentions Zscaler, ZIA, ZPA,
-  Dedicated IP, forwarding rules, URL filtering, or invokes /zscaler_*.
+  groups, URL categories, URL filtering policies, Cloud Firewall rules,
+  forwarding/Dedicated IP rules, IP groups, activation). Use when the user
+  mentions Zscaler, ZIA, ZPA, Dedicated IP, forwarding rules, URL filtering,
+  firewall rules, or invokes /zscaler_*.
 disable-model-invocation: true
 ---
 
@@ -12,7 +13,7 @@ disable-model-invocation: true
 
 ## When to use
 
-Use for Zscaler admin API work. Trigger phrases: "ZIA users", "create forwarding rule", "URL filtering policy", "Dedicated IP", "URL category", "activate ZIA", `/zscaler_zia_*`, `/zscaler_zpa_*`.
+Use for Zscaler admin API work. Trigger phrases: "ZIA users", "create forwarding rule", "URL filtering policy", "firewall rule", "Dedicated IP", "URL category", "activate ZIA", `/zscaler_zia_*`, `/zscaler_zpa_*`.
 
 ## Working directory
 
@@ -68,6 +69,7 @@ Use for Zscaler admin API work. Trigger phrases: "ZIA users", "create forwarding
 | `/zscaler_zia_create-url-category` | `python cli.py zia create-url-category --name N --url …` | Create category |
 | `/zscaler_zia_add-url` | `python cli.py zia add-url --category-name N --url …` | Add URLs |
 | `/zscaler_zia_remove-url` | `python cli.py zia remove-url --category-name N --url …` | Remove URLs |
+| `/zscaler_zia_delete-url-category` | `python cli.py zia delete-url-category --category-name N` | Delete category |
 
 ### ZIA — URL filtering policies
 
@@ -94,6 +96,39 @@ python cli.py zia update-url-filtering-rule \
   --filter-action ALLOW \
   --request-method GET --request-method POST \
   --order 3
+```
+
+### ZIA — Cloud Firewall rules
+
+| Slash | CLI | Description |
+|-------|-----|-------------|
+| `/zscaler_zia_firewall-rules` | `python cli.py zia firewall-rules [--search T]` | List rules |
+| `/zscaler_zia_get-firewall-rule` | `python cli.py zia get-firewall-rule --rule-name N` | Get rule |
+| `/zscaler_zia_create-firewall-rule` | `python cli.py zia create-firewall-rule …` | Create rule |
+| `/zscaler_zia_update-firewall-rule` | `python cli.py zia update-firewall-rule …` | Update rule |
+| `/zscaler_zia_delete-firewall-rule` | `python cli.py zia delete-firewall-rule …` | Delete rule |
+
+Actions (`--firewall-action`): `ALLOW`, `BLOCK_DROP`, `BLOCK_RESET`, `BLOCK_ICMP`, `EVALUATE_NWAPP`. Rule name max **31** chars. Criteria are combinable (`--src-ip`, `--dest-ip`, IP groups, `--country`, `--ip-category`, user groups/users, `--nw-service-id`).
+
+```bash
+python cli.py zia firewall-rules [--search "Block"]
+python cli.py zia get-firewall-rule --rule-name "Allow DNS"
+
+python cli.py zia create-firewall-rule \
+  --name "Allow Google DNS" \
+  --firewall-action ALLOW \
+  --dest-ip 8.8.8.8 --dest-ip 8.8.4.4 \
+  --group-name "Vo2 - Canada" \
+  --order 10 \
+  --enable-full-logging
+
+python cli.py zia update-firewall-rule \
+  --rule-name "Allow Google DNS" \
+  --firewall-action BLOCK_DROP \
+  --dest-ip-group-name "Lab Dest"
+
+python cli.py zia delete-firewall-rule --rule-name "Allow Google DNS"
+python cli.py zia activate
 ```
 
 ### ZIA — forwarding / Dedicated IP

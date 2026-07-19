@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from zscaler.zia.cloud_firewall_rules import FirewallPolicyAPI
 from zscaler.zia.dedicated_ip_gateways import DedicatedIPGatewaysAPI
 from zscaler.oneapi_client import LegacyZIAClient
 from zscaler.zia.forwarding_control import ForwardingControlAPI
@@ -368,6 +369,29 @@ def remove_urls_from_category(
         if err:
             raise RuntimeError(f"Failed to remove URLs from category {cid}: {err}")
         return updated.as_dict() if hasattr(updated, "as_dict") else dict(updated)
+
+
+def delete_url_category(
+    zia_cfg: dict[str, Any],
+    *,
+    category_id: str | None = None,
+    category_name: str | None = None,
+) -> dict[str, Any]:
+    """
+    Delete a custom URL category by ID (e.g. CUSTOM_01) or configured_name.
+
+    Note: ZIA rejects deletion if the category is still referenced by a URL
+    filtering policy or NSS feed.
+    """
+    cat = get_url_category(zia_cfg, category_id=category_id, category_name=category_name)
+    cid = str(cat["id"])
+    name = cat.get("configured_name") or cid
+
+    with get_client(zia_cfg) as client:
+        _, _, err = client.zia.url_categories.delete_category(cid)
+        if err:
+            raise RuntimeError(f"Failed to delete URL category {cid}: {err}")
+    return {"deleted": True, "id": cid, "configured_name": name}
 
 
 # --- URL Filtering Policy --------------------------------------------------
@@ -766,6 +790,437 @@ def delete_url_filtering_rule(
         _, _, err = _url_filtering_api(client).delete_rule(str(rid))
         if err:
             raise RuntimeError(f"Failed to delete URL filtering rule {rid}: {err}")
+    return {"deleted": True, "id": rid, "name": current.get("name")}
+
+
+# --- Cloud Firewall Filtering Rules ----------------------------------------
+FIREWALL_ACTIONS = (
+    "ALLOW",
+    "BLOCK_DROP",
+    "BLOCK_RESET",
+    "BLOCK_ICMP",
+    "EVALUATE_NWAPP",
+)
+FIREWALL_RULE_NAME_MAX = 31
+FIREWALL_DEFAULT_DEVICE_TRUST_LEVELS = (
+    "UNKNOWN_DEVICETRUSTLEVEL",
+    "LOW_TRUST",
+    "MEDIUM_TRUST",
+    "HIGH_TRUST",
+)
+
+
+def _cloud_firewall_rules_api(client: Any) -> Any:
+    """Return FirewallPolicyAPI (Legacy helper may lack the property)."""
+    zia_svc = client.zia
+    if hasattr(zia_svc, "cloud_firewall_rules"):
+        return zia_svc.cloud_firewall_rules
+    return FirewallPolicyAPI(zia_svc.request_executor)
+
+
+def _normalize_firewall_action(action: str) -> str:
+    text = (action or "").strip().upper()
+    if text not in FIREWALL_ACTIONS:
+        raise ValueError(
+            f"action invalide: {action!r}. "
+            f"Supportées: {', '.join(FIREWALL_ACTIONS)}"
+        )
+    return text
+
+
+def _validate_firewall_rule_name(name: str) -> str:
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise ValueError("name requis")
+    if len(cleaned) > FIREWALL_RULE_NAME_MAX:
+        raise ValueError(
+            f"name trop long ({len(cleaned)} chars, max {FIREWALL_RULE_NAME_MAX})"
+        )
+    return cleaned
+
+
+def list_firewall_rules(
+    zia_cfg: dict[str, Any],
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    """List ZIA Cloud Firewall Filtering rules (optional name search)."""
+    query_params: dict[str, Any] = {}
+    if search and search.strip():
+        query_params["search"] = search.strip()
+
+    with get_client(zia_cfg) as client:
+        rules, _, err = _cloud_firewall_rules_api(client).list_rules(
+            query_params=query_params or None
+        )
+        if err:
+            raise RuntimeError(f"Failed to list firewall rules: {err}")
+        result = [_to_dict(r) for r in (rules or [])]
+
+    if search and search.strip():
+        needle = search.strip().casefold()
+        result = [
+            r
+            for r in result
+            if needle in str(r.get("name") or "").casefold()
+            or needle == str(r.get("id") or "").casefold()
+        ]
+    return result
+
+
+def get_firewall_rule(
+    zia_cfg: dict[str, Any],
+    *,
+    rule_id: int | str | None = None,
+    rule_name: str | None = None,
+) -> dict[str, Any]:
+    """Get a Cloud Firewall Filtering rule by ID or exact name."""
+    if rule_id is not None and str(rule_id).strip():
+        with get_client(zia_cfg) as client:
+            rule, _, err = _cloud_firewall_rules_api(client).get_rule(int(rule_id))
+            if err:
+                raise RuntimeError(f"Failed to get firewall rule {rule_id}: {err}")
+            if rule is None:
+                raise RuntimeError(f"Firewall rule introuvable: {rule_id}")
+            return _to_dict(rule)
+
+    if not rule_name or not rule_name.strip():
+        raise ValueError("rule_id ou rule_name requis")
+
+    needle = rule_name.strip().casefold()
+    matches = [
+        r
+        for r in list_firewall_rules(zia_cfg, search=rule_name)
+        if str(r.get("name") or "").casefold() == needle
+    ]
+    if not matches:
+        matches = [
+            r
+            for r in list_firewall_rules(zia_cfg)
+            if str(r.get("name") or "").casefold() == needle
+        ]
+    if not matches:
+        raise RuntimeError(f"Firewall rule introuvable: {rule_name!r}")
+    if len(matches) > 1:
+        ids = ", ".join(str(r.get("id")) for r in matches)
+        raise RuntimeError(f"Plusieurs firewall rules pour {rule_name!r}: {ids}")
+    return matches[0]
+
+
+def resolve_source_ip_group_ids(
+    zia_cfg: dict[str, Any],
+    *,
+    group_ids: list[int | str] | None = None,
+    group_names: list[str] | None = None,
+) -> list[int]:
+    """Resolve source IP group IDs and/or names to integer IDs."""
+    resolved: list[int] = []
+    seen: set[int] = set()
+
+    for gid in group_ids or []:
+        gid_int = int(gid)
+        if gid_int not in seen:
+            seen.add(gid_int)
+            resolved.append(gid_int)
+
+    for name in group_names or []:
+        group = get_ip_source_group(zia_cfg, group_name=name)
+        gid_int = int(group["id"])
+        if gid_int not in seen:
+            seen.add(gid_int)
+            resolved.append(gid_int)
+
+    return resolved
+
+
+def _firewall_payload_from_current(current: dict[str, Any]) -> dict[str, Any]:
+    """Build an update/create-style kwargs payload from an existing firewall rule."""
+    payload: dict[str, Any] = {
+        "name": current.get("name"),
+        "order": current.get("order"),
+        "rank": current.get("rank") if current.get("rank") is not None else 7,
+        "state": current.get("state") or "ENABLED",
+        "action": current.get("action"),
+        "enable_full_logging": bool(current.get("enable_full_logging")),
+    }
+    if current.get("description") is not None:
+        payload["description"] = current.get("description")
+    if current.get("src_ips"):
+        payload["src_ips"] = list(current.get("src_ips") or [])
+    if current.get("dest_addresses"):
+        payload["dest_addresses"] = list(current.get("dest_addresses") or [])
+    if current.get("dest_countries"):
+        payload["dest_countries"] = list(current.get("dest_countries") or [])
+    if current.get("source_countries"):
+        payload["source_countries"] = list(current.get("source_countries") or [])
+    if current.get("dest_ip_categories"):
+        payload["dest_ip_categories"] = list(current.get("dest_ip_categories") or [])
+    if current.get("nw_applications"):
+        payload["nw_applications"] = list(current.get("nw_applications") or [])
+    if current.get("device_trust_levels"):
+        payload["device_trust_levels"] = list(current.get("device_trust_levels") or [])
+    if "exclude_src_countries" in current:
+        payload["exclude_src_countries"] = bool(current.get("exclude_src_countries"))
+
+    for key in (
+        "groups",
+        "users",
+        "departments",
+        "dest_ip_groups",
+        "src_ip_groups",
+        "nw_services",
+        "nw_service_groups",
+        "nw_application_groups",
+        "locations",
+        "location_groups",
+        "labels",
+        "devices",
+        "device_groups",
+        "app_services",
+        "app_service_groups",
+        "time_windows",
+    ):
+        ids = _entity_ids(current.get(key))
+        if ids:
+            payload[key] = ids
+    return payload
+
+
+def create_firewall_rule(
+    zia_cfg: dict[str, Any],
+    name: str,
+    *,
+    action: str,
+    src_ips: list[str] | None = None,
+    dest_addresses: list[str] | None = None,
+    dest_ip_group_ids: list[int | str] | None = None,
+    dest_ip_group_names: list[str] | None = None,
+    src_ip_group_ids: list[int | str] | None = None,
+    src_ip_group_names: list[str] | None = None,
+    dest_countries: list[str] | None = None,
+    dest_ip_categories: list[str] | None = None,
+    group_ids: list[int | str] | None = None,
+    group_names: list[str] | None = None,
+    user_ids: list[int | str] | None = None,
+    usernames: list[str] | None = None,
+    nw_service_ids: list[int | str] | None = None,
+    order: int | None = None,
+    rank: int = 7,
+    state: str = "ENABLED",
+    description: str | None = None,
+    enable_full_logging: bool = False,
+) -> dict[str, Any]:
+    """
+    Create a ZIA Cloud Firewall Filtering rule.
+
+    Criteria are combinable: source/dest IPs, IP groups, countries, categories,
+    user groups/users, and network service IDs.
+    """
+    name = _validate_firewall_rule_name(name)
+
+    state_norm = (state or "ENABLED").strip().upper()
+    if state_norm not in ("ENABLED", "DISABLED"):
+        raise ValueError("state doit être ENABLED ou DISABLED")
+
+    kwargs: dict[str, Any] = {
+        "name": name,
+        "action": _normalize_firewall_action(action),
+        "state": state_norm,
+        "rank": int(rank),
+        "enable_full_logging": bool(enable_full_logging),
+        "device_trust_levels": list(FIREWALL_DEFAULT_DEVICE_TRUST_LEVELS),
+    }
+    if description:
+        kwargs["description"] = description
+    if order is not None:
+        kwargs["order"] = int(order)
+    if src_ips:
+        kwargs["src_ips"] = [str(ip).strip() for ip in src_ips if str(ip).strip()]
+    if dest_addresses:
+        kwargs["dest_addresses"] = [
+            str(a).strip() for a in dest_addresses if str(a).strip()
+        ]
+    if dest_countries:
+        kwargs["dest_countries"] = [
+            str(c).strip().upper() for c in dest_countries if str(c).strip()
+        ]
+    if dest_ip_categories:
+        kwargs["dest_ip_categories"] = [
+            str(c).strip() for c in dest_ip_categories if str(c).strip()
+        ]
+    if nw_service_ids:
+        kwargs["nw_services"] = [int(sid) for sid in nw_service_ids]
+
+    if dest_ip_group_ids or dest_ip_group_names:
+        kwargs["dest_ip_groups"] = resolve_dest_ip_group_ids(
+            zia_cfg,
+            group_ids=dest_ip_group_ids,
+            group_names=dest_ip_group_names,
+        )
+    if src_ip_group_ids or src_ip_group_names:
+        kwargs["src_ip_groups"] = resolve_source_ip_group_ids(
+            zia_cfg,
+            group_ids=src_ip_group_ids,
+            group_names=src_ip_group_names,
+        )
+    if group_ids or group_names:
+        groups = resolve_group_ids(zia_cfg, group_ids=group_ids, group_names=group_names)
+        kwargs["groups"] = [g["id"] for g in groups]
+    if user_ids or usernames:
+        users = resolve_user_ids(zia_cfg, user_ids=user_ids, usernames=usernames)
+        if users:
+            kwargs["users"] = users
+
+    with get_client(zia_cfg) as client:
+        created, _, err = _cloud_firewall_rules_api(client).add_rule(**kwargs)
+        if err:
+            raise RuntimeError(f"Failed to create firewall rule {name!r}: {err}")
+        return _to_dict(created)
+
+
+def update_firewall_rule(
+    zia_cfg: dict[str, Any],
+    *,
+    rule_id: int | str | None = None,
+    rule_name: str | None = None,
+    name: str | None = None,
+    action: str | None = None,
+    src_ips: list[str] | None = None,
+    dest_addresses: list[str] | None = None,
+    dest_ip_group_ids: list[int | str] | None = None,
+    dest_ip_group_names: list[str] | None = None,
+    src_ip_group_ids: list[int | str] | None = None,
+    src_ip_group_names: list[str] | None = None,
+    dest_countries: list[str] | None = None,
+    dest_ip_categories: list[str] | None = None,
+    group_ids: list[int | str] | None = None,
+    group_names: list[str] | None = None,
+    user_ids: list[int | str] | None = None,
+    usernames: list[str] | None = None,
+    nw_service_ids: list[int | str] | None = None,
+    order: int | None = None,
+    rank: int | None = None,
+    state: str | None = None,
+    description: str | None = None,
+    enable_full_logging: bool | None = None,
+) -> dict[str, Any]:
+    """
+    Update a Cloud Firewall Filtering rule.
+
+    Unspecified fields are preserved from the current rule.
+    """
+    current = get_firewall_rule(zia_cfg, rule_id=rule_id, rule_name=rule_name)
+    if current.get("predefined") or current.get("default_rule"):
+        raise RuntimeError(
+            f"Impossible de modifier une règle predefined/default "
+            f"({current.get('name')!r}, id={current.get('id')})"
+        )
+    rid = current["id"]
+    kwargs = _firewall_payload_from_current(current)
+
+    if name is not None and str(name).strip():
+        kwargs["name"] = _validate_firewall_rule_name(str(name))
+    if action is not None:
+        kwargs["action"] = _normalize_firewall_action(action)
+    if order is not None:
+        kwargs["order"] = int(order)
+    if rank is not None:
+        kwargs["rank"] = int(rank)
+    if state is not None:
+        state_norm = state.strip().upper()
+        if state_norm not in ("ENABLED", "DISABLED"):
+            raise ValueError("state doit être ENABLED ou DISABLED")
+        kwargs["state"] = state_norm
+    if description is not None:
+        kwargs["description"] = description
+    if enable_full_logging is not None:
+        kwargs["enable_full_logging"] = bool(enable_full_logging)
+    if src_ips is not None:
+        kwargs["src_ips"] = [str(ip).strip() for ip in src_ips if str(ip).strip()]
+    if dest_addresses is not None:
+        kwargs["dest_addresses"] = [
+            str(a).strip() for a in dest_addresses if str(a).strip()
+        ]
+    if dest_countries is not None:
+        kwargs["dest_countries"] = [
+            str(c).strip().upper() for c in dest_countries if str(c).strip()
+        ]
+    if dest_ip_categories is not None:
+        kwargs["dest_ip_categories"] = [
+            str(c).strip() for c in dest_ip_categories if str(c).strip()
+        ]
+    if nw_service_ids is not None:
+        if nw_service_ids:
+            kwargs["nw_services"] = [int(sid) for sid in nw_service_ids]
+        else:
+            kwargs.pop("nw_services", None)
+
+    if dest_ip_group_ids is not None or dest_ip_group_names is not None:
+        groups = resolve_dest_ip_group_ids(
+            zia_cfg,
+            group_ids=dest_ip_group_ids or [],
+            group_names=dest_ip_group_names or [],
+        )
+        if groups:
+            kwargs["dest_ip_groups"] = groups
+        else:
+            kwargs.pop("dest_ip_groups", None)
+
+    if src_ip_group_ids is not None or src_ip_group_names is not None:
+        groups = resolve_source_ip_group_ids(
+            zia_cfg,
+            group_ids=src_ip_group_ids or [],
+            group_names=src_ip_group_names or [],
+        )
+        if groups:
+            kwargs["src_ip_groups"] = groups
+        else:
+            kwargs.pop("src_ip_groups", None)
+
+    if group_ids is not None or group_names is not None:
+        if not group_ids and not group_names:
+            kwargs.pop("groups", None)
+        else:
+            groups = resolve_group_ids(
+                zia_cfg, group_ids=group_ids or [], group_names=group_names or []
+            )
+            kwargs["groups"] = [g["id"] for g in groups]
+
+    if user_ids is not None or usernames is not None:
+        users = resolve_user_ids(
+            zia_cfg, user_ids=user_ids or [], usernames=usernames or []
+        )
+        if users:
+            kwargs["users"] = users
+        else:
+            kwargs.pop("users", None)
+
+    with get_client(zia_cfg) as client:
+        updated, _, err = _cloud_firewall_rules_api(client).update_rule(
+            int(rid), **kwargs
+        )
+        if err:
+            raise RuntimeError(f"Failed to update firewall rule {rid}: {err}")
+        return _to_dict(updated)
+
+
+def delete_firewall_rule(
+    zia_cfg: dict[str, Any],
+    *,
+    rule_id: int | str | None = None,
+    rule_name: str | None = None,
+) -> dict[str, Any]:
+    """Delete a Cloud Firewall Filtering rule by ID or name."""
+    current = get_firewall_rule(zia_cfg, rule_id=rule_id, rule_name=rule_name)
+    if current.get("predefined") or current.get("default_rule"):
+        raise RuntimeError(
+            f"Impossible de supprimer une règle predefined/default "
+            f"({current.get('name')!r}, id={current.get('id')})"
+        )
+    rid = current["id"]
+    with get_client(zia_cfg) as client:
+        _, _, err = _cloud_firewall_rules_api(client).delete_rule(int(rid))
+        if err:
+            raise RuntimeError(f"Failed to delete firewall rule {rid}: {err}")
     return {"deleted": True, "id": rid, "name": current.get("name")}
 
 

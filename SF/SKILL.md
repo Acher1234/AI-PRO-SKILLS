@@ -1,11 +1,7 @@
 ---
 name: sf
 description: >-
-  Install or update Salesforce agent skills from forcedotcom/sf-skills. Clone/pull
-  the library under ~/.ai-skills/sf-skills, present skills by theme (not a flat
-  dump), ask Cursor vs Hermes destination, then copy chosen skills. Use when the
-  user wants Salesforce / Agentforce / Apex / LWC / Flow / SOQL skills, syncs
-  sf-skills, or runs /sf to refresh Salesforce skills.
+/ls.
 disable-model-invocation: true
 ---
 

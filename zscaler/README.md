@@ -95,6 +95,16 @@ python cli.py zia url-categories
 python cli.py zia create-url-category --name "My category" --url example.com [--ip-range 1.2.3.0/24] [--keyword ssh]
 python cli.py zia add-url    --category-name "My category" --url example.com
 python cli.py zia remove-url --category-name "My category" --url example.com
+python cli.py zia delete-url-category --category-name "My category"   # or --category-id CUSTOM_01
+python cli.py zia firewall-rules [--search TEXT]
+python cli.py zia get-firewall-rule --rule-name "Allow Google DNS"
+python cli.py zia create-firewall-rule \
+  --name "Allow Google DNS" \
+  --firewall-action ALLOW \
+  --dest-ip 8.8.8.8 \
+  [--group-name "Group A"] [--order 10]
+python cli.py zia update-firewall-rule --rule-name "Allow Google DNS" --firewall-action BLOCK_DROP
+python cli.py zia delete-firewall-rule --rule-name "Allow Google DNS"
 python cli.py zia forwarding-rules [--search TEXT]
 python cli.py zia dedicated-ips
 python cli.py zia create-forwarding-rule \
@@ -274,6 +284,44 @@ python cli.py zia delete-url-filtering-rule --rule-name "Block Adult"
 
 Activate after changes: `python cli.py zia activate`.
 
+### Cloud Firewall rules
+
+Full CRUD for **Cloud Firewall Filtering** rules (`/firewallFilteringRules`). `get` / `update` / `delete` accept `--rule-id` or `--rule-name`. Rule name max **31** characters. Predefined / default rules cannot be updated or deleted.
+
+| Field | Flags | Notes |
+|-------|-------|-------|
+| Action | `--firewall-action` | Required on create: `ALLOW`, `BLOCK_DROP`, `BLOCK_RESET`, `BLOCK_ICMP`, `EVALUATE_NWAPP` |
+| Source IPs | `--src-ip` (repeatable) | IP or CIDR |
+| Dest addresses | `--dest-ip` (repeatable) | IP / CIDR / FQDN |
+| Dest IP groups | `--dest-ip-group-id` / `--dest-ip-group-name` | Repeatable |
+| Source IP groups | `--src-ip-group-id` / `--src-ip-group-name` | Repeatable |
+| Dest countries | `--country` (repeatable) | e.g. `COUNTRY_US` |
+| Dest IP categories | `--ip-category` (repeatable) | e.g. `BOTNET`, `CUSTOM_01` |
+| User groups | `--group-id` / `--group-name` | Repeatable |
+| Users | `--rule-user-id` / `--rule-username` | Repeatable |
+| Network services | `--nw-service-id` (repeatable) | Service IDs |
+| Rule number | `--order` | Execution order |
+| Full logging | `--enable-full-logging` | Flag |
+
+```bash
+python cli.py zia firewall-rules [--search "DNS"]
+python cli.py zia get-firewall-rule --rule-name "Allow Google DNS"
+python cli.py zia create-firewall-rule \
+  --name "Allow Google DNS" \
+  --firewall-action ALLOW \
+  --dest-ip 8.8.8.8 --dest-ip 8.8.4.4 \
+  --group-name "Vo2 - Canada" \
+  --order 10 \
+  --enable-full-logging
+# Partial update — unspecified fields are preserved
+python cli.py zia update-firewall-rule \
+  --rule-name "Allow Google DNS" \
+  --firewall-action BLOCK_DROP \
+  --dest-ip-group-name "Lab Dest"
+python cli.py zia delete-firewall-rule --rule-name "Allow Google DNS"
+python cli.py zia activate
+```
+
 ### Creating a custom URL category
 
 A category can hold **URLs**, **IP ranges** and/or **keywords**. At least **one** of `--url` / `--ip-range` / `--keyword` is required (the ZIA API rejects an empty category with `At least 1 URL or keyword should be entered`). All three flags are **repeatable**.
@@ -310,7 +358,7 @@ python cli.py zia create-url-category \
   --keyword "ssh"
 ```
 
-> To add/remove content on an **existing** category, use `add-url` / `remove-url`. There is no dedicated update command for IP ranges / keywords in the CLI yet (use the SDK `update_url_category` if needed).
+> To add/remove content on an **existing** category, use `add-url` / `remove-url`. To delete the category itself, use `delete-url-category`. There is no dedicated update command for IP ranges / keywords in the CLI yet (use the SDK `update_url_category` if needed).
 
 ### IP groups (Cloud Firewall)
 
@@ -373,11 +421,17 @@ python cli.py zia delete-source-ip-group --ip-group-name "Corp Sources"
 | `zia url-categories` | List URL categories |
 | `zia create-url-category` | Create a URL category (`--url` / `--ip-range` / `--keyword`) |
 | `zia add-url` / `remove-url` | Add / remove URLs from a category |
+| `zia delete-url-category` | Delete a URL category (`--category-id` / `--category-name`) |
 | `zia url-filtering-rules` | List URL filtering policy rules |
 | `zia get-url-filtering-rule` | Get a URL filtering rule (by id or name) |
 | `zia create-url-filtering-rule` | Create a URL filtering rule |
 | `zia update-url-filtering-rule` | Update categories / methods / groups / users / order / action |
 | `zia delete-url-filtering-rule` | Delete a URL filtering rule |
+| `zia firewall-rules` | List Cloud Firewall filtering rules |
+| `zia get-firewall-rule` | Get a firewall rule (by id or name) |
+| `zia create-firewall-rule` | Create a firewall rule |
+| `zia update-firewall-rule` | Update action / IPs / groups / order / … |
+| `zia delete-firewall-rule` | Delete a firewall rule |
 | `zia forwarding-rules` | List forwarding rules |
 | `zia get-forwarding-rule` | Get a forwarding rule (by id or name) |
 | `zia create-forwarding-rule` | Create a forwarding rule (default: Dedicated IP / `ENATDEDIP`) |

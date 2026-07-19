@@ -244,6 +244,20 @@ def cmd_zia(args: argparse.Namespace) -> int:
                 category_name=category_name,
             )
         )
+    elif args.action == "delete-url-category":
+        category_id = args.category_id_list[0] if args.category_id_list else None
+        category_name = args.category_name_list[0] if args.category_name_list else None
+        if not category_id and not category_name:
+            raise ValueError(
+                "--category-id ou --category-name requis pour delete-url-category"
+            )
+        _print_json(
+            zia.delete_url_category(
+                zia_cfg,
+                category_id=category_id,
+                category_name=category_name,
+            )
+        )
     elif args.action == "url-filtering-rules":
         _print_json(zia.list_url_filtering_rules(zia_cfg, search=args.search))
     elif args.action == "get-url-filtering-rule":
@@ -309,6 +323,88 @@ def cmd_zia(args: argparse.Namespace) -> int:
             raise ValueError("--rule-id ou --rule-name requis")
         _print_json(
             zia.delete_url_filtering_rule(
+                zia_cfg, rule_id=args.rule_id, rule_name=args.rule_name
+            )
+        )
+    elif args.action == "firewall-rules":
+        _print_json(zia.list_firewall_rules(zia_cfg, search=args.search))
+    elif args.action == "get-firewall-rule":
+        if not args.rule_id and not args.rule_name:
+            raise ValueError("--rule-id ou --rule-name requis")
+        _print_json(
+            zia.get_firewall_rule(
+                zia_cfg, rule_id=args.rule_id, rule_name=args.rule_name
+            )
+        )
+    elif args.action == "create-firewall-rule":
+        if not args.name:
+            raise ValueError("--name requis pour create-firewall-rule")
+        if not args.firewall_action:
+            raise ValueError(
+                "--firewall-action requis (ALLOW|BLOCK_DROP|BLOCK_RESET|…)"
+            )
+        _print_json(
+            zia.create_firewall_rule(
+                zia_cfg,
+                args.name,
+                action=args.firewall_action,
+                src_ips=args.src_ip or None,
+                dest_addresses=args.dest_ip or None,
+                dest_ip_group_ids=args.dest_ip_group_id or None,
+                dest_ip_group_names=args.dest_ip_group_name or None,
+                src_ip_group_ids=args.src_ip_group_id or None,
+                src_ip_group_names=args.src_ip_group_name or None,
+                dest_countries=args.country or None,
+                dest_ip_categories=args.ip_category or None,
+                group_ids=args.group_id or None,
+                group_names=args.group_name or None,
+                user_ids=args.rule_user_id or None,
+                usernames=args.rule_username or None,
+                nw_service_ids=args.nw_service_id or None,
+                order=args.order,
+                rank=args.rank if args.rank is not None else 7,
+                state=args.state or "ENABLED",
+                description=args.description,
+                enable_full_logging=args.enable_full_logging,
+            )
+        )
+    elif args.action == "update-firewall-rule":
+        if not args.rule_id and not args.rule_name:
+            raise ValueError("--rule-id ou --rule-name requis")
+        _print_json(
+            zia.update_firewall_rule(
+                zia_cfg,
+                rule_id=args.rule_id,
+                rule_name=args.rule_name,
+                name=args.name,
+                action=args.firewall_action,
+                src_ips=args.src_ip or None,
+                dest_addresses=args.dest_ip or None,
+                dest_ip_group_ids=args.dest_ip_group_id or None,
+                dest_ip_group_names=args.dest_ip_group_name or None,
+                src_ip_group_ids=args.src_ip_group_id or None,
+                src_ip_group_names=args.src_ip_group_name or None,
+                dest_countries=args.country or None,
+                dest_ip_categories=args.ip_category or None,
+                group_ids=args.group_id or None,
+                group_names=args.group_name or None,
+                user_ids=args.rule_user_id or None,
+                usernames=args.rule_username or None,
+                nw_service_ids=args.nw_service_id or None,
+                order=args.order,
+                rank=args.rank,
+                state=args.state,
+                description=args.description,
+                enable_full_logging=(
+                    True if args.enable_full_logging else None
+                ),
+            )
+        )
+    elif args.action == "delete-firewall-rule":
+        if not args.rule_id and not args.rule_name:
+            raise ValueError("--rule-id ou --rule-name requis")
+        _print_json(
+            zia.delete_firewall_rule(
                 zia_cfg, rule_id=args.rule_id, rule_name=args.rule_name
             )
         )
@@ -543,11 +639,17 @@ def build_parser() -> argparse.ArgumentParser:
             "create-url-category",
             "add-url",
             "remove-url",
+            "delete-url-category",
             "url-filtering-rules",
             "get-url-filtering-rule",
             "create-url-filtering-rule",
             "update-url-filtering-rule",
             "delete-url-filtering-rule",
+            "firewall-rules",
+            "get-firewall-rule",
+            "create-firewall-rule",
+            "update-firewall-rule",
+            "delete-firewall-rule",
             "forwarding-rules",
             "get-forwarding-rule",
             "create-forwarding-rule",
@@ -603,30 +705,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--search",
         type=str,
         default=None,
-        help="Filtre recherche (forwarding/url-filtering rules / departments / ip-groups)",
+        help="Filtre recherche (firewall/forwarding/url-filtering rules / departments / ip-groups)",
     )
     p_zia.add_argument(
         "--group-id",
         action="append",
         default=[],
-        help="ID groupe ZIA (répétable ; set-groups / forwarding / url-filtering)",
+        help="ID groupe ZIA (répétable ; set-groups / firewall / forwarding / url-filtering)",
     )
     p_zia.add_argument(
         "--group-name",
         action="append",
         default=[],
-        help="Nom groupe ZIA (répétable ; set-groups / forwarding / url-filtering)",
+        help="Nom groupe ZIA (répétable ; set-groups / firewall / forwarding / url-filtering)",
     )
     p_zia.add_argument(
         "--name",
         type=str,
-        help="Nom (URL category / filtering|forwarding rule / IP group)",
+        help="Nom (URL category / firewall|filtering|forwarding rule / IP group)",
     )
     p_zia.add_argument(
         "--description",
         type=str,
         default=None,
-        help="Description (URL category / filtering|forwarding rule / IP groups)",
+        help="Description (URL category / firewall|filtering|forwarding rule / IP groups)",
     )
     p_zia.add_argument(
         "--super-category",
@@ -656,6 +758,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Action URL filtering (ALLOW|BLOCK|CAUTION|ICAP_RESPONSE|NONE|ANY)",
     )
     p_zia.add_argument(
+        "--firewall-action",
+        type=str,
+        default=None,
+        choices=list(zia.FIREWALL_ACTIONS),
+        help="Action firewall (ALLOW|BLOCK_DROP|BLOCK_RESET|BLOCK_ICMP|EVALUATE_NWAPP)",
+    )
+    p_zia.add_argument(
+        "--src-ip",
+        action="append",
+        default=[],
+        help="IP/CIDR source pour une firewall rule (répétable)",
+    )
+    p_zia.add_argument(
+        "--src-ip-group-id",
+        action="append",
+        default=[],
+        help="ID source IP group pour une firewall rule (répétable)",
+    )
+    p_zia.add_argument(
+        "--src-ip-group-name",
+        action="append",
+        default=[],
+        help="Nom source IP group pour une firewall rule (répétable)",
+    )
+    p_zia.add_argument(
+        "--nw-service-id",
+        action="append",
+        default=[],
+        help="ID network service pour une firewall rule (répétable)",
+    )
+    p_zia.add_argument(
+        "--enable-full-logging",
+        action="store_true",
+        help="Active le full logging (create/update-firewall-rule)",
+    )
+    p_zia.add_argument(
         "--request-method",
         action="append",
         default=[],
@@ -665,13 +803,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--rule-user-id",
         action="append",
         default=[],
-        help="ID user ZIA pour une URL filtering rule (répétable)",
+        help="ID user ZIA pour une firewall / URL filtering rule (répétable)",
     )
     p_zia.add_argument(
         "--rule-username",
         action="append",
         default=[],
-        help="Nom/email user ZIA pour une URL filtering rule (répétable)",
+        help="Nom/email user ZIA pour une firewall / URL filtering rule (répétable)",
     )
     p_zia.add_argument(
         "--url",
@@ -739,25 +877,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--country",
         action="append",
         default=[],
-        help="Pays pour dest IP group DSTN_OTHER (ex: COUNTRY_US, répétable)",
+        help="Pays (dest IP group DSTN_OTHER / firewall dest_countries ; ex: COUNTRY_US)",
     )
     p_zia.add_argument(
         "--ip-category",
         action="append",
         default=[],
-        help="URL category pour dest IP group DSTN_OTHER (ex: CUSTOM_01, répétable)",
+        help="URL category (dest IP group DSTN_OTHER / firewall dest_ip_categories)",
     )
     p_zia.add_argument(
         "--rule-id",
         type=str,
         default=None,
-        help="ID d'une forwarding / URL filtering rule (get/update/delete)",
+        help="ID d'une firewall / forwarding / URL filtering rule (get/update/delete)",
     )
     p_zia.add_argument(
         "--rule-name",
         type=str,
         default=None,
-        help="Nom d'une forwarding / URL filtering rule (get/update/delete)",
+        help="Nom d'une firewall / forwarding / URL filtering rule (get/update/delete)",
     )
     p_zia.add_argument(
         "--forward-method",
@@ -782,25 +920,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--dest-ip",
         action="append",
         default=[],
-        help="IP/CIDR/FQDN destination pour une forwarding rule (répétable)",
+        help="IP/CIDR/FQDN destination (firewall / forwarding rule, répétable)",
     )
     p_zia.add_argument(
         "--dest-ip-group-id",
         action="append",
         default=[],
-        help="ID destination IP group pour une forwarding rule (répétable)",
+        help="ID destination IP group (firewall / forwarding rule, répétable)",
     )
     p_zia.add_argument(
         "--dest-ip-group-name",
         action="append",
         default=[],
-        help="Nom destination IP group pour une forwarding rule (répétable)",
+        help="Nom destination IP group (firewall / forwarding rule, répétable)",
     )
     p_zia.add_argument(
         "--order",
         type=int,
         default=None,
-        help="Numéro/ordre de règle (forwarding ou URL filtering)",
+        help="Numéro/ordre de règle (firewall / forwarding / URL filtering)",
     )
     p_zia.add_argument(
         "--rank",
