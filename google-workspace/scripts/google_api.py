@@ -18,6 +18,11 @@ Usage:
   python google_api.py sheets update SHEET_ID RANGE --values '[[...]]'
   python google_api.py sheets append SHEET_ID RANGE --values '[[...]]'
   python google_api.py docs get DOC_ID
+  python google_api.py chat spaces [--max 50]
+  python google_api.py chat get-space SPACE_ID
+  python google_api.py chat messages SPACE_ID [--max 50]
+  python google_api.py chat get-message SPACE_ID MESSAGE_ID
+  python google_api.py chat send SPACE_ID --text "Hello"
 """
 
 import argparse
@@ -51,6 +56,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/contacts.readonly",
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/documents",
+    # Google Chat — spaces (teams) + messages (read/write)
+    "https://www.googleapis.com/auth/chat.spaces",
+    "https://www.googleapis.com/auth/chat.messages",
 ]
 
 
@@ -1047,6 +1055,187 @@ def _docs_insert_text(doc_id: str, text: str, index: int) -> None:
 
 
 # =========================================================================
+# Google Chat (spaces / teams + messages)
+# =========================================================================
+
+
+def _chat_space_name(space_id: str) -> str:
+    """Normalize to spaces/{id} resource name."""
+    space_id = (space_id or "").strip()
+    if not space_id:
+        raise ValueError("space_id is required")
+    if space_id.startswith("spaces/"):
+        return space_id
+    return f"spaces/{space_id}"
+
+
+def _chat_message_name(space_id: str, message_id: str) -> str:
+    """Normalize to spaces/{space}/messages/{message} resource name."""
+    message_id = (message_id or "").strip()
+    if not message_id:
+        raise ValueError("message_id is required")
+    if message_id.startswith("spaces/"):
+        return message_id
+    parent = _chat_space_name(space_id)
+    if message_id.startswith("messages/"):
+        return f"{parent}/{message_id}"
+    return f"{parent}/messages/{message_id}"
+
+
+def _chat_space_summary(space: dict) -> dict:
+    return {
+        "name": space.get("name", ""),
+        "displayName": space.get("displayName", ""),
+        "spaceType": space.get("spaceType", ""),
+        "spaceThreadingState": space.get("spaceThreadingState", ""),
+        "spaceHistoryState": space.get("spaceHistoryState", ""),
+        "singleUserBotDm": space.get("singleUserBotDm", False),
+        "threaded": space.get("spaceThreadingState") == "THREADED_MESSAGES",
+    }
+
+
+def _chat_message_summary(msg: dict) -> dict:
+    sender = msg.get("sender") or {}
+    thread = msg.get("thread") or {}
+    return {
+        "name": msg.get("name", ""),
+        "text": msg.get("text", ""),
+        "createTime": msg.get("createTime", ""),
+        "sender": {
+            "name": sender.get("name", ""),
+            "displayName": sender.get("displayName", ""),
+            "type": sender.get("type", ""),
+        },
+        "thread": thread.get("name", ""),
+        "argumentText": msg.get("argumentText", ""),
+        "formattedText": msg.get("formattedText", ""),
+    }
+
+
+def chat_spaces(args):
+    """List Chat spaces (named teams, DMs, group chats) visible to the user."""
+    params: dict = {"pageSize": min(max(args.max, 1), 1000)}
+    if args.filter:
+        params["filter"] = args.filter
+
+    if _gws_binary():
+        results = _run_gws(["chat", "spaces", "list"], params=params)
+        spaces = [_chat_space_summary(s) for s in results.get("spaces", [])]
+        print(json.dumps({
+            "spaces": spaces,
+            "nextPageToken": results.get("nextPageToken", ""),
+        }, indent=2, ensure_ascii=False))
+        return
+
+    service = build_service("chat", "v1")
+    results = service.spaces().list(**params).execute()
+    spaces = [_chat_space_summary(s) for s in results.get("spaces", [])]
+    print(json.dumps({
+        "spaces": spaces,
+        "nextPageToken": results.get("nextPageToken", ""),
+    }, indent=2, ensure_ascii=False))
+
+
+def chat_get_space(args):
+    """Get details for one Chat space / team."""
+    name = _chat_space_name(args.space_id)
+
+    if _gws_binary():
+        space = _run_gws(["chat", "spaces", "get"], params={"name": name})
+        print(json.dumps(_chat_space_summary(space), indent=2, ensure_ascii=False))
+        return
+
+    service = build_service("chat", "v1")
+    space = service.spaces().get(name=name).execute()
+    print(json.dumps(_chat_space_summary(space), indent=2, ensure_ascii=False))
+
+
+def chat_messages(args):
+    """List messages in a Chat space."""
+    parent = _chat_space_name(args.space_id)
+    params: dict = {
+        "parent": parent,
+        "pageSize": min(max(args.max, 1), 1000),
+    }
+    if args.filter:
+        params["filter"] = args.filter
+    if args.order_by:
+        params["orderBy"] = args.order_by
+    if args.page_token:
+        params["pageToken"] = args.page_token
+
+    if _gws_binary():
+        results = _run_gws(["chat", "spaces", "messages", "list"], params=params)
+        messages = [_chat_message_summary(m) for m in results.get("messages", [])]
+        print(json.dumps({
+            "space": parent,
+            "messages": messages,
+            "nextPageToken": results.get("nextPageToken", ""),
+        }, indent=2, ensure_ascii=False))
+        return
+
+    service = build_service("chat", "v1")
+    results = service.spaces().messages().list(**params).execute()
+    messages = [_chat_message_summary(m) for m in results.get("messages", [])]
+    print(json.dumps({
+        "space": parent,
+        "messages": messages,
+        "nextPageToken": results.get("nextPageToken", ""),
+    }, indent=2, ensure_ascii=False))
+
+
+def chat_get_message(args):
+    """Get a single Chat message."""
+    name = _chat_message_name(args.space_id, args.message_id)
+
+    if _gws_binary():
+        msg = _run_gws(["chat", "spaces", "messages", "get"], params={"name": name})
+        print(json.dumps(_chat_message_summary(msg), indent=2, ensure_ascii=False))
+        return
+
+    service = build_service("chat", "v1")
+    msg = service.spaces().messages().get(name=name).execute()
+    print(json.dumps(_chat_message_summary(msg), indent=2, ensure_ascii=False))
+
+
+def chat_send(args):
+    """Send (create) a text message in a Chat space."""
+    parent = _chat_space_name(args.space_id)
+    body: dict = {"text": args.text}
+    if args.thread:
+        thread = args.thread.strip()
+        if not thread.startswith("spaces/"):
+            thread = f"{parent}/threads/{thread}"
+        body["thread"] = {"name": thread}
+
+    params: dict = {"parent": parent}
+    if args.thread and getattr(args, "reply", False):
+        params["messageReplyOption"] = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+
+    if _gws_binary():
+        msg = _run_gws(
+            ["chat", "spaces", "messages", "create"],
+            params=params,
+            body=body,
+        )
+        print(json.dumps({
+            "status": "sent",
+            **_chat_message_summary(msg),
+        }, indent=2, ensure_ascii=False))
+        return
+
+    service = build_service("chat", "v1")
+    kwargs = {"parent": parent, "body": body}
+    if "messageReplyOption" in params:
+        kwargs["messageReplyOption"] = params["messageReplyOption"]
+    msg = service.spaces().messages().create(**kwargs).execute()
+    print(json.dumps({
+        "status": "sent",
+        **_chat_message_summary(msg),
+    }, indent=2, ensure_ascii=False))
+
+
+# =========================================================================
 # CLI parser
 # =========================================================================
 
@@ -1216,6 +1405,52 @@ def main():
     p.add_argument("doc_id")
     p.add_argument("--text", required=True, help="Text to append to the end of the document")
     p.set_defaults(func=docs_append)
+
+    # --- Google Chat ---
+    chat = sub.add_parser("chat", help="Google Chat spaces (teams) and messages")
+    chat_sub = chat.add_subparsers(dest="action", required=True)
+
+    p = chat_sub.add_parser("spaces", help="List Chat spaces / teams")
+    p.add_argument("--max", type=int, default=50, help="Page size (default 50, max 1000)")
+    p.add_argument(
+        "--filter",
+        default="",
+        help='Optional filter, e.g. spaceType = "SPACE" (named teams only)',
+    )
+    p.set_defaults(func=chat_spaces)
+
+    p = chat_sub.add_parser("get-space", help="Get one space / team")
+    p.add_argument("space_id", help='Space id or name (e.g. "AAAA" or "spaces/AAAA")')
+    p.set_defaults(func=chat_get_space)
+
+    p = chat_sub.add_parser("messages", help="List messages in a space")
+    p.add_argument("space_id", help='Space id or name (e.g. "AAAA" or "spaces/AAAA")')
+    p.add_argument("--max", type=int, default=50, help="Page size (default 50, max 1000)")
+    p.add_argument("--filter", default="", help="Optional message filter query")
+    p.add_argument(
+        "--order-by",
+        default="",
+        dest="order_by",
+        help='Optional order, e.g. "createTime desc"',
+    )
+    p.add_argument("--page-token", default="", dest="page_token", help="Pagination token")
+    p.set_defaults(func=chat_messages)
+
+    p = chat_sub.add_parser("get-message", help="Get one message")
+    p.add_argument("space_id", help='Space id or name (e.g. "AAAA" or "spaces/AAAA")')
+    p.add_argument("message_id", help='Message id or full name (e.g. "MSG" or "spaces/…/messages/MSG")')
+    p.set_defaults(func=chat_get_message)
+
+    p = chat_sub.add_parser("send", help="Send a text message to a space")
+    p.add_argument("space_id", help='Space id or name (e.g. "AAAA" or "spaces/AAAA")')
+    p.add_argument("--text", required=True, help="Message body (plain text / Chat markup)")
+    p.add_argument("--thread", default="", help="Optional thread id or full thread name")
+    p.add_argument(
+        "--reply",
+        action="store_true",
+        help="When --thread is set, reply in that thread (fallback to new thread)",
+    )
+    p.set_defaults(func=chat_send)
 
     args = parser.parse_args()
     args.func(args)

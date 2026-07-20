@@ -175,6 +175,7 @@ Always also install the meta skill `ai-pro-skills` (this file) into every chosen
 | 6 | `powerpoint` | `powerpoint/` (vendored) | Create / edit .pptx decks |
 | 7 | `jira` | `jira/` | **All** JIRA Assistant skills + `jira-as` CLI — run `/jira` |
 | 8 | `reddit` | `reddit/` | Reddit API via PRAW — shared CLI; `.env` per workspace / install |
+| 9 | `confluence` | `confluence/` | Confluence via `confluence-cli` (npm) — shared binary; `.env` per workspace |
 
 **External** — any git URL (cloned into `~/.ai-pro-skills/ext/<name>`).
 
@@ -231,6 +232,12 @@ cp ~/.ai-pro-skills/reddit/SKILL.md ~/.cursor/skills/reddit/SKILL.md
 cp ~/.ai-pro-skills/reddit/.env.example ~/.cursor/skills/reddit/.env   # edit tokens
 # (project scope: same under ./.cursor/skills/reddit/ for a per-workspace account)
 
+# confluence → npm i -g confluence-cli; register SKILL.md; .env per workspace
+npm install -g confluence-cli
+mkdir -p ~/.cursor/skills/confluence
+cp ~/.ai-pro-skills/confluence/SKILL.md ~/.cursor/skills/confluence/SKILL.md
+cp ~/.ai-pro-skills/confluence/.env.example ~/.cursor/skills/confluence/.env
+
 # External git skill → OpenClaw (global): fetch once, then cp the SKILL.md
 SRC=$(./install.sh fetch https://github.com/some/pro-skill.git pro-skill)
 mkdir -p ~/.openclaw/skills/pro-skill
@@ -252,6 +259,7 @@ cp "$SRC/SKILL.md" ~/.openclaw/skills/pro-skill/SKILL.md
    - `sf` → run `/sf` (syncs into `~/.ai-skills/sf-skills`).
    - `jira` → run `/jira` (fetches all skills + `jira-as`).
    - `google-workspace` / `powerpoint` → copy the **full folder**; Hermes → `$DEST/productivity/<skill>/`.
+   - `confluence` → `npm install -g confluence-cli`; register `SKILL.md` + `$DEST/confluence/.env`; run `confluence …` (Python `cli.py` only for env-check).
 9. Remind: reload the tool(s).
 
 ## Copy map (reference)
@@ -271,6 +279,7 @@ Pick `DEST` from the [Targets table](#targets--scopes): `~/.cursor/skills`, `./.
 | `google-workspace/` (full tree) | Cursor/Claude/OpenClaw: `$DEST/google-workspace/` · Hermes: `$DEST/productivity/google-workspace/` |
 | `powerpoint/` (full tree) | Cursor/Claude/OpenClaw: `$DEST/powerpoint/` · Hermes: `$DEST/productivity/powerpoint/` |
 | `reddit/SKILL.md` | `$DEST/reddit/SKILL.md` (+ create `$DEST/reddit/.env` from `.env.example`; CLI stays in `~/.ai-pro-skills/reddit`) |
+| `confluence/SKILL.md` | `$DEST/confluence/SKILL.md` (+ `$DEST/confluence/.env`; binary = global `confluence-cli`; `python cli.py` = env helpers only) |
 | `ext/<name>/SKILL.md` | `$DEST/<name>/SKILL.md` |
 
 ## After install
@@ -279,8 +288,9 @@ Pick `DEST` from the [Targets table](#targets--scopes): `~/.cursor/skills`, `./.
 - Python skills should use the shared interpreter `~/.ai-pro-skills/.venv/bin/python`.
 - For **agent-browser**, the binary is global (`agent-browser …`); the local folder is only the skill stub.
 - For **sf**, Salesforce skill trees live in `~/.ai-skills/sf-skills/skills/{skills_dir}`.
-- For **reddit** / similar skills: CLI in `~/.ai-pro-skills/<skill>`; `.env` per install via
-  `common/skill_home.py` → `$DEST/<skill>/.env`.
+- For **reddit** / **confluence** / similar: CLI shared; `.env` per install via
+  `common/skill_home.py` → `$DEST/<skill>/.env`. Confluence also needs
+  `npm install -g confluence-cli` once.
 - Re-run `/ai-pro-skills` anytime to **pull + ask targets/skills again + re-register**.
 
 ## Notes

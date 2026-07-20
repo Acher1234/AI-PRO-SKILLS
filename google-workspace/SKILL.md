@@ -1,9 +1,10 @@
 ---
 name: google-workspace
 description: >-
-  Gmail, Calendar, Drive, Docs, Sheets, and Contacts via OAuth and the bundled
-  Python CLI (scripts/google_api.py). Use when the user mentions Gmail, Google
-  Calendar, Drive, Sheets, Docs, Workspace, or invokes /google-workspace_*.
+  Gmail, Calendar, Drive, Docs, Sheets, Contacts, and Google Chat via OAuth and
+  the bundled Python CLI (scripts/google_api.py). Use when the user mentions
+  Gmail, Google Calendar, Drive, Sheets, Docs, Chat, Workspace, or invokes
+  /google-workspace_*.
 disable-model-invocation: true
 ---
 
@@ -11,7 +12,7 @@ disable-model-invocation: true
 
 ## When to use
 
-Use for Google Workspace API work. Trigger phrases: "check my email", "create calendar event", "upload to Drive", "update Sheet", "Google Docs", `/google-workspace_gmail_*`, `/google-workspace_calendar_*`.
+Use for Google Workspace API work. Trigger phrases: "check my email", "create calendar event", "upload to Drive", "update Sheet", "Google Docs", "Google Chat", "Chat space", `/google-workspace_gmail_*`, `/google-workspace_calendar_*`, `/google-workspace_chat_*`.
 
 ## Working directory
 
@@ -93,6 +94,18 @@ Examples: `~/.cursor/skills/google-workspace/google_token.json`, or under Hermes
 | `/google-workspace_docs_create` | `python scripts/google_api.py docs create --title … [--body …]` | New doc |
 | `/google-workspace_docs_append` | `python scripts/google_api.py docs append DOC_ID --text …` | Append text |
 
+### Google Chat
+
+| Slash | CLI | Description |
+|-------|-----|-------------|
+| `/google-workspace_chat_spaces` | `python scripts/google_api.py chat spaces [--max N] [--filter …]` | List spaces / teams |
+| `/google-workspace_chat_get-space` | `python scripts/google_api.py chat get-space SPACE_ID` | Space details |
+| `/google-workspace_chat_messages` | `python scripts/google_api.py chat messages SPACE_ID [--max N]` | List messages |
+| `/google-workspace_chat_get-message` | `python scripts/google_api.py chat get-message SPACE_ID MESSAGE_ID` | Read one message |
+| `/google-workspace_chat_send` | `python scripts/google_api.py chat send SPACE_ID --text …` | Send a message |
+
+Named teams only: `--filter 'spaceType = "SPACE"'`. Enable the **Google Chat API** in Cloud Console before first use. After adding Chat scopes, re-run OAuth (`--auth-url` / `--auth-code`).
+
 ## How to run
 
 1. `cd` to the [working directory](#working-directory) that exists on this machine.
@@ -101,10 +114,10 @@ Examples: `~/.cursor/skills/google-workspace/google_token.json`, or under Hermes
 
 ### First-time OAuth (agent-driven)
 
-1. Ask which services: `email`, `calendar`, `drive`, `sheets`, `docs`, or `all`.
-2. User creates a Desktop OAuth client in [Google Cloud Console](https://console.cloud.google.com/apis/credentials), enables the needed APIs, downloads `client_secret.json`.
+1. Ask which services: `email`, `calendar`, `drive`, `sheets`, `docs`, `chat`, or `all`.
+2. User creates a Desktop OAuth client in [Google Cloud Console](https://console.cloud.google.com/apis/credentials), enables the needed APIs (**including Google Chat API** if using Chat), downloads `client_secret.json`.
 3. `python scripts/setup.py --client-secret /path/to/client_secret.json`
-4. `python scripts/setup.py --auth-url --services email,calendar --format json` (or `all`) → send `auth_url` to the user.
+4. `python scripts/setup.py --auth-url --format json` → send `auth_url` to the user.
 5. User pastes redirect URL or code → `python scripts/setup.py --auth-code "…" --format json`
 6. `python scripts/setup.py --check` → expect `AUTHENTICATED`
 
@@ -112,8 +125,9 @@ Gmail search operators: see local `references/gmail-search-syntax.md` in this sk
 
 ## Notes
 
-- Confirm with the user before **send/reply**, **calendar create/delete**, **Drive share/delete**, or **Sheets/Docs write**.
+- Confirm with the user before **send/reply**, **calendar create/delete**, **Drive share/delete**, **Sheets/Docs write**, or **Chat send**.
 - Calendar times must be ISO 8601 with timezone offset or `Z`.
 - Prefer trash (`drive delete`) over `--permanent`.
+- Chat space ids accept bare ids (`AAAA`) or resource names (`spaces/AAAA`).
 - Optional: if `gws` is on `PATH`, `google_api.py` may use it; same token file next to `SKILL.md`.
 - Never commit `google_token.json` / `google_client_secret.json` / `google_oauth_pending.json`.
