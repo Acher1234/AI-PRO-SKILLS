@@ -118,6 +118,7 @@ Always also install the meta skill `ai-pro-skills` (this file) into every chosen
 | 5 | `google-workspace` | `google-workspace/` (vendored) | Gmail / Calendar / Drive / Docs / Sheets |
 | 6 | `powerpoint` | `powerpoint/` (vendored) | Create / edit .pptx decks |
 | 7 | `jira` | `jira/` | **All** JIRA Assistant skills + `jira-as` CLI — run `/jira` |
+| 8 | `reddit` | `reddit/` | Reddit API via PRAW (search / posts / users / engage) — `.env` next to `SKILL.md` |
 
 **External** — any git URL (cloned into `~/.ai-pro-skills/ext/<name>`).
 
@@ -165,8 +166,10 @@ cp ~/.ai-pro-skills/zscaler/SKILL.md "$HERMES_HOME/skills/zscaler/SKILL.md"
 mkdir -p ~/.claude/skills/agent-browser
 cp ~/.ai-pro-skills/agent-browser/SKILL.md ~/.claude/skills/agent-browser/SKILL.md
 
-# google-workspace / powerpoint → copy the FULL folder (Hermes → productivity/)
+# google-workspace / powerpoint / reddit → copy the FULL folder
+# (Hermes: google-workspace & powerpoint → productivity/)
 cp -R ~/.ai-pro-skills/google-workspace ~/.cursor/skills/google-workspace
+cp -R ~/.ai-pro-skills/reddit ~/.cursor/skills/reddit
 
 # External git skill → OpenClaw (global): fetch once, then cp the SKILL.md
 SRC=$(./install.sh fetch https://github.com/some/pro-skill.git pro-skill)
@@ -189,6 +192,7 @@ cp "$SRC/SKILL.md" ~/.openclaw/skills/pro-skill/SKILL.md
    - `sf` → run `/sf` (syncs into `~/.ai-skills/sf-skills`).
    - `jira` → run `/jira` (fetches all skills + `jira-as`).
    - `google-workspace` / `powerpoint` → copy the **full folder**; Hermes → `$DEST/productivity/<skill>/`.
+   - `reddit` → copy the **full folder** (`cli.py`, `action.py`, `.env.example`, …); credentials in `$DEST/reddit/.env`.
 9. Remind: reload the tool(s).
 
 ## Copy map (reference)
@@ -207,6 +211,7 @@ Pick `DEST` from the [Targets table](#targets--scopes): `~/.cursor/skills`, `./.
 | `jira/SKILL.md` | `$DEST/jira/SKILL.md` (then run `/jira`) |
 | `google-workspace/` (full tree) | Cursor/Claude/OpenClaw: `$DEST/google-workspace/` · Hermes: `$DEST/productivity/google-workspace/` |
 | `powerpoint/` (full tree) | Cursor/Claude/OpenClaw: `$DEST/powerpoint/` · Hermes: `$DEST/productivity/powerpoint/` |
+| `reddit/` (full tree) | `$DEST/reddit/` (then copy `.env.example` → `.env` and fill tokens) |
 | `ext/<name>/SKILL.md` | `$DEST/<name>/SKILL.md` |
 
 ## After install
@@ -215,6 +220,7 @@ Pick `DEST` from the [Targets table](#targets--scopes): `~/.cursor/skills`, `./.
 - Python skills should use the shared interpreter `~/.ai-pro-skills/.venv/bin/python`.
 - For **agent-browser**, the binary is global (`agent-browser …`); the local folder is only the skill stub.
 - For **sf**, Salesforce skill trees live in `~/.ai-skills/sf-skills/skills/{skills_dir}`.
+- For **reddit**, run `python cli.py test` after filling `$DEST/reddit/.env`.
 - Re-run `/ai-pro-skills` anytime to **pull + ask targets/skills again + re-register**.
 
 ## Notes
