@@ -2,7 +2,7 @@
 name: reddit
 description: >-
   Reddit API via PRAW (read/search posts & subreddits, user lookup, post,
-  comment, vote, subscribe). Credentials in skill-dir .env. Use when the user
+  comment, vote, subscribe). Credentials in shared-lib .env. Use when the user
   mentions Reddit, r/, u/, subreddit research, or invokes /reddit_*.
 disable-model-invocation: true
 ---
@@ -19,30 +19,32 @@ ops (submit, reply, vote, subscribe).
 
 ## Working directory
 
-Prefer (in order):
+`~/.ai-pro-skills/reddit`
 
-| Target | Path |
-|--------|------|
-| **Canonical (after `/ai-pro-skills` / `/ai-skills`)** | `~/.ai-pro-skills/reddit` or `~/.ai-skills/AI-PRO-SKILLS/reddit` |
-| **Cursor** (full tree install) | `~/.cursor/skills/reddit` |
-| **Hermes all profiles** | `~/.hermes/skills/reddit` |
-| **Hermes this profile** | `${HERMES_HOME}/skills/reddit` |
+(Fallback if the library lives under AI-Skills: `~/.ai-skills/AI-PRO-SKILLS/reddit`.)
 
-Always `cd` into the working directory before running the CLI.
+Registering this skill = copy **only** `SKILL.md` into the tool skills folder
+(`~/.cursor/skills/reddit/SKILL.md`, etc.). Do **not** copy the full tree —
+CLI + `.env` stay in the shared library (same model as coolify / zscaler).
 
-## Shared environment
+## Shared environment (see AI-Skills / AI-PRO-SKILLS README)
 
-- **Python**: shared venv — `~/.ai-pro-skills/.venv/bin/python cli.py …` (or
-  `~/.ai-skills/.venv/bin/python`). Install deps once from the skill dir:
-  `…/install.sh pip init .` (installs `requirements.txt`). Do **not** create a
-  per-skill `.venv`.
-- **Config**: this skill keeps its **own** `.env` **next to the installed
-  `SKILL.md`** (same pattern as google-workspace tokens / zscaler
-  `config.json`). Never commit secrets.
+- **Python**: shared venv — `~/.ai-pro-skills/.venv/bin/python cli.py …`.
+  Install deps once from the skill dir:
+  `~/.ai-pro-skills/install.sh pip init .` (or `~/.ai-skills/install.sh pip init .`).
+  Do **not** create a per-skill `.venv`.
+- **Config**: this skill keeps its **own** `.env` in the **shared library**
+  folder (`~/.ai-pro-skills/reddit/.env`), next to `cli.py` / `action.py`.
+  Never commit secrets.
 
-## Authentication (`.env` next to `SKILL.md`)
+```bash
+cd ~/.ai-pro-skills/reddit
+~/.ai-pro-skills/.venv/bin/python cli.py test
+```
 
-Copy `.env.example` → `.env` in the skill folder:
+## Authentication (`.env` in the shared library)
+
+Copy `.env.example` → `.env` under `~/.ai-pro-skills/reddit/`:
 
 ```bash
 REDDIT_CLIENT_ID=xxx
@@ -53,11 +55,7 @@ REDDIT_USER_AGENT=AI-PRO-SKILLS:reddit:1.0 (by u/yourusername)
 ```
 
 Create a [script app](https://www.reddit.com/prefs/apps) (type **script**) to
-get client id/secret. Env vars already set in the process override `.env`.
-
-```bash
-python cli.py test
-```
+get client id/secret. Process env vars override `.env` if set.
 
 ## Slash commands
 
@@ -102,9 +100,9 @@ python cli.py test
 
 ## How to run
 
-1. `cd` to the [working directory](#working-directory) that exists on this machine.
-2. Ensure `.env` next to `SKILL.md` (from `.env.example`); run `/reddit_test`.
-3. Map `/reddit_<…>` to `python cli.py …`; return JSON output to the user.
+1. `cd ~/.ai-pro-skills/reddit`.
+2. Ensure `.env` there (from `.env.example`); run `/reddit_test`.
+3. Map `/reddit_<…>` → `~/.ai-pro-skills/.venv/bin/python cli.py …`; return JSON.
 4. Confirm before any write operation.
 
 ### Examples
@@ -117,16 +115,17 @@ python cli.py user info spez
 python cli.py subreddit search learnpython --query PRAW --limit 20
 ```
 
-## Files
+## Files (shared library)
 
 ```
-reddit/
-├── SKILL.md           # This file
-├── cli.py             # CLI entrypoint
-├── action.py          # PRAW wrapper
-├── _skill_home.py     # Resolve skill dir / .env path
-├── requirements.txt   # praw
+~/.ai-pro-skills/reddit/
+├── SKILL.md           # Source (also registered as a copy into the tool)
+├── cli.py
+├── action.py
+├── _skill_home.py
+├── requirements.txt
 ├── .env.example
+├── .env               # local secrets — never commit
 └── .gitignore
 ```
 
