@@ -63,19 +63,24 @@ Check `TERMINAL_ENV` (e.g. `echo "$TERMINAL_ENV"`):
 
 | Target | Skills directory | Env file for credentials |
 |--------|------------------|--------------------------|
-| **Cursor — global** | `~/.cursor/skills/<skill>/` | `~/.cursor/.env` |
-| **Cursor — this project (perso)** | `./.cursor/skills/<skill>/` | `./.env` (workspace root) |
-| **Hermes — all profiles** | `~/.hermes/skills/<skill>/` | `~/.hermes/.env` |
-| **Hermes — this profile only** | `${HERMES_HOME}/skills/<skill>/` | `${HERMES_HOME}/.env` |
+| **Cursor — global** | `~/.cursor/skills/<skill>/` | Prefer `~/.cursor/skills/jira/.env` (or `~/.cursor/.env`) |
+| **Cursor — this project (perso)** | `./.cursor/skills/<skill>/` | Prefer `./.cursor/skills/jira/.env` (or `./.env`) |
+| **Hermes — all profiles** | `~/.hermes/skills/<skill>/` | Prefer `~/.hermes/skills/jira/.env` (or `~/.hermes/.env`) |
+| **Hermes — this profile only** | `${HERMES_HOME}/skills/<skill>/` | Prefer `${HERMES_HOME}/skills/jira/.env` (or `$HERMES_HOME/.env`) |
 
-- **Cursor**: global (`~/.cursor/skills/`) or this project / perso (`./.cursor/skills/`).
-- **Hermes**: all profiles (`~/.hermes/skills/`) or this profile (`$HERMES_HOME/skills/`); resolve `HERMES_HOME` if unset.
+Per-workspace **skill-scoped** `.env` (recommended for multiple Jira sites) follows the shared helper
+[`common/skill_home.py`](../common/skill_home.py): register `SKILL.md` only, keep `jira-as` in the
+shared venv, put secrets next to the registered skill so each project can differ.
+
+Tool-level `.env` (`~/.cursor/.env`, `./.env`, …) remains supported as a fallback (same `JIRA_*` keys).
+
 
 ### 2) Credentials (.env)
 
 After copying the skills, set up Jira credentials so the `jira-as` CLI can authenticate.
 
-- **Cursor (global or perso/project)** → propose to **create a `.env`** at the destination's env path (see table) with:
+- **Preferred (per workspace):** create `$DEST/jira/.env` (e.g. `./.cursor/skills/jira/.env` or
+  `~/.cursor/skills/jira/.env`) with:
 
 ```bash
 export JIRA_API_TOKEN="your-token"
@@ -83,7 +88,12 @@ export JIRA_EMAIL="you@company.com"
 export JIRA_SITE_URL="https://company.atlassian.net"
 ```
 
-- **Hermes** → **append** these three `export` lines to the **profile's `.env`** (`$HERMES_HOME/.env`, or `~/.hermes/.env` for all profiles) if they are not already present.
+Also copy the meta `jira/SKILL.md` into `$DEST/jira/` if missing, so the folder is the credential
+anchor. Resolve path with `common.skill_home.SkillHome("jira")` when wrapping in Python.
+
+- **Fallback (tool-level):** Cursor → `~/.cursor/.env` or `./.env`; Hermes → append the same three
+  `export` lines to `$HERMES_HOME/.env` / `~/.hermes/.env` if not already present.
+
 
 Rules:
 - Never overwrite an existing real token — if the var is already set in the file, leave it. Only add missing lines (or create the file if absent).

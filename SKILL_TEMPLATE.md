@@ -47,7 +47,24 @@ One short paragraph with trigger phrases.
 ## Working directory
 `~/.ai-pro-skills/<skill-dir>` (e.g. `~/.ai-pro-skills/coolify`).
 
-## Slash commands
+## Credentials (shared code, local secrets)
+
+- **CLI / code** stays in the shared library (`~/.ai-pro-skills/<skill>/`).
+- **Secrets** (`.env`, `config.json`, tokens) live next to the *registered* skill or in the
+  workspace — use [`common/skill_home.py`](common/skill_home.py):
+
+```python
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common.skill_home import SkillHome
+
+home = SkillHome("my-skill", library_home=Path(__file__).resolve().parent)
+env = home.env_path()  # ./.cursor/skills/my-skill/.env or ~/.cursor/skills/…
+```
+
+Register = `cp` **only** `SKILL.md`; create `.env` under `$DEST/my-skill/.env`.
+
 | Slash | CLI | Description |
 |-------|-----|-------------|
 | `/skill-name_command` | `./script.py command …` | … |

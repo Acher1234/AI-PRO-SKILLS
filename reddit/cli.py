@@ -14,7 +14,7 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from _skill_home import display_skill_home, env_path  # noqa: E402
+from _skill_home import display_env_path, display_skill_home, env_path  # noqa: E402
 from action import RedditClient  # noqa: E402
 
 
@@ -26,7 +26,14 @@ def cmd_test(_: argparse.Namespace) -> int:
     """Validate .env + authenticated identity."""
     client = RedditClient()
     me = client.get_me()
-    _print_json({"ok": True, "env": str(env_path()), "me": me})
+    _print_json(
+        {
+            "ok": True,
+            "env": str(env_path()),
+            "library": display_skill_home(),
+            "me": me,
+        }
+    )
     return 0
 
 
@@ -180,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reddit",
         description=(
-            f"Reddit CLI (PRAW). Credentials: {display_skill_home()}/.env"
+            f"Reddit CLI (PRAW). Credentials: {display_env_path()} "
+            f"(library: {display_skill_home()})"
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)

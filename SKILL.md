@@ -33,16 +33,72 @@ each tool only gets the lightweight `SKILL.md`.
 ```
 ~/.ai-pro-skills/        shared library root (this repo, or $AI_SKILLS_HOME)
 ├── install.sh           this installer's helper script
+├── common/              shared helpers — skill_home (lib shared + .env per workspace)
 ├── ext/<repo>/          external git skills, cloned ONCE (shared)
 ├── .venv/               shared Python venv — every python skill reuses it
-└── <skills>/            coolify, zscaler, agent-browser, SF, jira, …
+└── <skills>/            coolify, zscaler, reddit, jira, …
 
                          node deps via `./install.sh npm init` (shared skill dir)
 
-        │ registering a skill = cp ONLY its SKILL.md ↓
-~/.cursor/skills/<name>/SKILL.md      ~/.claude/skills/<name>/SKILL.md
-~/.hermes/skills/<name>/SKILL.md      ~/.openclaw/skills/<name>/SKILL.md
+        │ register = cp ONLY SKILL.md ; put .env next to the registered skill ↓
+~/.cursor/skills/<name>/{SKILL.md,.env}   (or ./.cursor/skills/<name>/ per project)
 ```
+
+**Hybrid model:** CLI code is **shared**; credentials (`.env` / tokens) are **per workspace**,
+resolved by [`common/skill_home.py`](common/skill_home.py) (`SkillHome("reddit")`, `SkillHome("jira")`, …).
+
+## Hybrid model — shared CLI, local secrets (`common/skill_home`)
+
+Do **not** put secrets in `~/.ai-pro-skills/<skill>/` (that would force one account for every
+project). Do **not** copy the full skill tree into Cursor/Hermes for Python CLIs that follow
+this pattern (exception: vendored full-tree skills like `google-workspace` / `powerpoint`).
+
+| Layer | Location | Shared? |
+|-------|----------|---------|
+| CLI / Python code | `~/.ai-pro-skills/<skill>/` | **Yes** — one copy on the machine |
+| Python deps | `~/.ai-pro-skills/.venv` | **Yes** |
+| Registered skill | `$DEST/<skill>/SKILL.md` only | Lightweight discovery copy |
+| Credentials | `$DEST/<skill>/.env` (preferred) | **No** — per workspace / profile |
+
+**Credential resolution** (`SkillHome("<name>").env_path()`), in order:
+
+1. `<NAME>_ENV_PATH` override (e.g. `REDDIT_ENV_PATH`)
+2. Project: `./.cursor/skills/<name>/.env` (also `.claude` / `.openclaw` / Hermes)
+3. Workspace root: `./.env`
+4. Global: `~/.cursor/skills/<name>/.env` (and Hermes / Claude / OpenClaw equivalents)
+5. Tool-level fallback: `~/.cursor/.env`, `$HERMES_HOME/.env`, …
+
+**Authoring a skill that uses it:**
+
+```python
+# <skill>/_skill_home.py — thin wrapper
+from pathlib import Path
+import sys
+_LIB = Path(__file__).resolve().parent
+sys.path.insert(0, str(_LIB.parent))
+from common.skill_home import SkillHome
+_home = SkillHome("my-skill", library_home=_LIB)
+env_path = _home.env_path
+```
+
+```bash
+# Register (Cursor project = different Reddit/Jira per repo)
+mkdir -p ./.cursor/skills/my-skill
+cp ~/.ai-pro-skills/my-skill/SKILL.md ./.cursor/skills/my-skill/SKILL.md
+cp ~/.ai-pro-skills/my-skill/.env.example ./.cursor/skills/my-skill/.env
+# edit ./.cursor/skills/my-skill/.env
+
+# Run from the shared library
+cd ~/.ai-pro-skills/my-skill
+~/.ai-pro-skills/.venv/bin/python cli.py test
+```
+
+Full-tree exceptions (`google-workspace`, `powerpoint`) still `cp -R` when scripts must live
+next to the installed tree; prefer `SkillHome` for new Python skills.
+
+Agent authors: Cursor rule [`.cursor/rules/ai-pro-skills-hybrid.mdc`](.cursor/rules/ai-pro-skills-hybrid.mdc)
+encodes the same conventions when editing skills in this repo.
+Copy-paste prompt for agents: [`common/PROMPT.md`](common/PROMPT.md).
 
 ## Helper script — [`install.sh`](install.sh) (3 commands)
 
@@ -118,7 +174,7 @@ Always also install the meta skill `ai-pro-skills` (this file) into every chosen
 | 5 | `google-workspace` | `google-workspace/` (vendored) | Gmail / Calendar / Drive / Docs / Sheets |
 | 6 | `powerpoint` | `powerpoint/` (vendored) | Create / edit .pptx decks |
 | 7 | `jira` | `jira/` | **All** JIRA Assistant skills + `jira-as` CLI — run `/jira` |
-| 8 | `reddit` | `reddit/` | Reddit API via PRAW (search / posts / users / engage) — `.env` in shared lib |
+| 8 | `reddit` | `reddit/` | Reddit API via PRAW — shared CLI; `.env` per workspace / install |
 
 **External** — any git URL (cloned into `~/.ai-pro-skills/ext/<name>`).
 
@@ -169,9 +225,11 @@ cp ~/.ai-pro-skills/agent-browser/SKILL.md ~/.claude/skills/agent-browser/SKILL.
 # google-workspace / powerpoint → copy the FULL folder (Hermes → productivity/)
 cp -R ~/.ai-pro-skills/google-workspace ~/.cursor/skills/google-workspace
 
-# reddit → shared model: register SKILL.md only; CLI + .env stay in the library
+# reddit → shared CLI; register SKILL.md only; put .env next to the registered skill
 mkdir -p ~/.cursor/skills/reddit
 cp ~/.ai-pro-skills/reddit/SKILL.md ~/.cursor/skills/reddit/SKILL.md
+cp ~/.ai-pro-skills/reddit/.env.example ~/.cursor/skills/reddit/.env   # edit tokens
+# (project scope: same under ./.cursor/skills/reddit/ for a per-workspace account)
 
 # External git skill → OpenClaw (global): fetch once, then cp the SKILL.md
 SRC=$(./install.sh fetch https://github.com/some/pro-skill.git pro-skill)
@@ -212,7 +270,7 @@ Pick `DEST` from the [Targets table](#targets--scopes): `~/.cursor/skills`, `./.
 | `jira/SKILL.md` | `$DEST/jira/SKILL.md` (then run `/jira`) |
 | `google-workspace/` (full tree) | Cursor/Claude/OpenClaw: `$DEST/google-workspace/` · Hermes: `$DEST/productivity/google-workspace/` |
 | `powerpoint/` (full tree) | Cursor/Claude/OpenClaw: `$DEST/powerpoint/` · Hermes: `$DEST/productivity/powerpoint/` |
-| `reddit/SKILL.md` | `$DEST/reddit/SKILL.md` (CLI + `.env` stay in `~/.ai-pro-skills/reddit`) |
+| `reddit/SKILL.md` | `$DEST/reddit/SKILL.md` (+ create `$DEST/reddit/.env` from `.env.example`; CLI stays in `~/.ai-pro-skills/reddit`) |
 | `ext/<name>/SKILL.md` | `$DEST/<name>/SKILL.md` |
 
 ## After install
@@ -221,15 +279,18 @@ Pick `DEST` from the [Targets table](#targets--scopes): `~/.cursor/skills`, `./.
 - Python skills should use the shared interpreter `~/.ai-pro-skills/.venv/bin/python`.
 - For **agent-browser**, the binary is global (`agent-browser …`); the local folder is only the skill stub.
 - For **sf**, Salesforce skill trees live in `~/.ai-skills/sf-skills/skills/{skills_dir}`.
-- For **reddit**, `.env` + CLI live in `~/.ai-pro-skills/reddit` — run `python cli.py test` there after setup.
+- For **reddit** / similar skills: CLI in `~/.ai-pro-skills/<skill>`; `.env` per install via
+  `common/skill_home.py` → `$DEST/<skill>/.env`.
 - Re-run `/ai-pro-skills` anytime to **pull + ask targets/skills again + re-register**.
 
 ## Notes
 
 - Override the shared library location with `AI_SKILLS_HOME` (default `~/.ai-pro-skills`).
 - Never write into `~/.cursor/skills-cursor/` (Cursor built-ins only).
-- Register with `cp` (copy, not move). Keep secrets out of skills; put credentials in the
-  tool's `.env` (`~/.cursor/.env`, `~/.claude/.env`, `$HERMES_HOME/.env`, `~/.openclaw/.env`).
+- Register with `cp` (copy, not move). Prefer **per-skill** credentials next to the registered
+  skill (`$DEST/<name>/.env`) so each workspace can differ; tool-level `.env`
+  (`~/.cursor/.env`, `$HERMES_HOME/.env`, …) remains a fallback. Use
+  [`common/skill_home.py`](common/skill_home.py) from Python CLIs.
 - Claude / OpenClaw support is **in progress** — adjust their paths in the Targets table if needed.
 - Repo: [Acher1234/AI-PRO-SKILLS](https://github.com/Acher1234/AI-PRO-SKILLS.git)
 - agent-browser CLI: [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) via npm (this repo only keeps the stub)

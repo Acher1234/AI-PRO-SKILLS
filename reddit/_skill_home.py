@@ -1,32 +1,25 @@
-"""Resolve the reddit skill root (directory that contains SKILL.md).
+"""Reddit thin wrapper around ``common.skill_home.SkillHome``.
 
-Credentials live in ``.env`` next to SKILL.md — same place the skill is
-registered (Cursor ``~/.cursor/skills/reddit``, Hermes, etc.).
+Keeps existing imports (``from _skill_home import env_path``, …) working.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
+_LIB = Path(__file__).resolve().parent
+_ROOT = _LIB.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
-def get_skill_home() -> Path:
-    """Return the skill directory that contains ``SKILL.md``."""
-    here = Path(__file__).resolve().parent
-    for candidate in (here, *here.parents):
-        if (candidate / "SKILL.md").is_file():
-            return candidate
-    return here
+from common.skill_home import SkillHome  # noqa: E402
 
+_home = SkillHome("reddit", library_home=_LIB)
 
-def display_skill_home() -> str:
-    """Return a user-friendly ``~/``-shortened path to the skill root."""
-    home = get_skill_home()
-    try:
-        return "~/" + str(home.relative_to(Path.home()))
-    except ValueError:
-        return str(home)
-
-
-def env_path() -> Path:
-    """Path to the skill-local ``.env`` file."""
-    return get_skill_home() / ".env"
+get_library_home = _home.get_library_home
+get_skill_home = _home.get_skill_home
+display_skill_home = _home.display_skill_home
+display_env_path = _home.display_env_path
+env_path = _home.env_path
+preferred_env_path = _home.preferred_env_path

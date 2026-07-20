@@ -2,8 +2,8 @@
 name: reddit
 description: >-
   Reddit API via PRAW (read/search posts & subreddits, user lookup, post,
-  comment, vote, subscribe). Credentials in shared-lib .env. Use when the user
-  mentions Reddit, r/, u/, subreddit research, or invokes /reddit_*.
+  comment, vote, subscribe). Shared CLI lib; per-workspace .env. Use when the
+  user mentions Reddit, r/, u/, subreddit research, or invokes /reddit_*.
 disable-model-invocation: true
 ---
 
@@ -17,34 +17,55 @@ Use for Reddit research and engagement. Trigger phrases: "search Reddit",
 Primary use: research / intelligence. Confirm with the user before **write**
 ops (submit, reply, vote, subscribe).
 
-## Working directory
+## Working directory (shared library)
 
 `~/.ai-pro-skills/reddit`
 
-(Fallback if the library lives under AI-Skills: `~/.ai-skills/AI-PRO-SKILLS/reddit`.)
+(Fallback: `~/.ai-skills/AI-PRO-SKILLS/reddit`.)
 
-Registering this skill = copy **only** `SKILL.md` into the tool skills folder
-(`~/.cursor/skills/reddit/SKILL.md`, etc.). Do **not** copy the full tree —
-CLI + `.env` stay in the shared library (same model as coolify / zscaler).
+Register = copy **only** `SKILL.md` into the tool skills folder. Do **not**
+copy the full tree — the CLI stays in the shared library (like coolify /
+zscaler).
 
-## Shared environment (see AI-Skills / AI-PRO-SKILLS README)
+## Credentials (NOT shared — per workspace)
 
-- **Python**: shared venv — `~/.ai-pro-skills/.venv/bin/python cli.py …`.
-  Install deps once from the skill dir:
-  `~/.ai-pro-skills/install.sh pip init .` (or `~/.ai-skills/install.sh pip init .`).
-  Do **not** create a per-skill `.venv`.
-- **Config**: this skill keeps its **own** `.env` in the **shared library**
-  folder (`~/.ai-pro-skills/reddit/.env`), next to `cli.py` / `action.py`.
-  Never commit secrets.
+`.env` lives next to the **registered** skill (or workspace root), so each
+project / profile can use a different Reddit account:
+
+| Scope | `.env` path |
+|-------|-------------|
+| **Cursor — this project** | `./.cursor/skills/reddit/.env` |
+| **Cursor — global** | `~/.cursor/skills/reddit/.env` |
+| **Workspace root** (fallback) | `./.env` (must contain `REDDIT_*`) |
+| **Hermes — this profile** | `${HERMES_HOME}/skills/reddit/.env` |
+| **Override** | `REDDIT_ENV_PATH=/path/to/.env` |
+
+Resolution order: project skill → workspace `./.env` → global tool skill.
+The shared library folder is **not** used for credentials.
+
+## Shared environment
+
+- **Python**: `~/.ai-pro-skills/.venv/bin/python cli.py …`. Install once:
+  `~/.ai-pro-skills/install.sh pip init .`. No per-skill `.venv`.
+- **Code**: shared under `~/.ai-pro-skills/reddit/`.
+- **Secrets**: per workspace / install destination (table above). Never commit.
 
 ```bash
 cd ~/.ai-pro-skills/reddit
 ~/.ai-pro-skills/.venv/bin/python cli.py test
 ```
 
-## Authentication (`.env` in the shared library)
+## Authentication
 
-Copy `.env.example` → `.env` under `~/.ai-pro-skills/reddit/`:
+After registering `SKILL.md`, create `.env` in the chosen destination:
+
+```bash
+# Example: Cursor this project
+mkdir -p ./.cursor/skills/reddit
+cp ~/.ai-pro-skills/reddit/SKILL.md ./.cursor/skills/reddit/SKILL.md
+cp ~/.ai-pro-skills/reddit/.env.example ./.cursor/skills/reddit/.env
+# edit ./.cursor/skills/reddit/.env
+```
 
 ```bash
 REDDIT_CLIENT_ID=xxx
@@ -54,8 +75,8 @@ REDDIT_PASSWORD=xxx
 REDDIT_USER_AGENT=AI-PRO-SKILLS:reddit:1.0 (by u/yourusername)
 ```
 
-Create a [script app](https://www.reddit.com/prefs/apps) (type **script**) to
-get client id/secret. Process env vars override `.env` if set.
+Create a [script app](https://www.reddit.com/prefs/apps) (type **script**).
+Process env vars override file values if set.
 
 ## Slash commands
 
@@ -101,7 +122,7 @@ get client id/secret. Process env vars override `.env` if set.
 ## How to run
 
 1. `cd ~/.ai-pro-skills/reddit`.
-2. Ensure `.env` there (from `.env.example`); run `/reddit_test`.
+2. Ensure a resolved `.env` exists (project / global — see table); `/reddit_test`.
 3. Map `/reddit_<…>` → `~/.ai-pro-skills/.venv/bin/python cli.py …`; return JSON.
 4. Confirm before any write operation.
 
@@ -115,22 +136,9 @@ python cli.py user info spez
 python cli.py subreddit search learnpython --query PRAW --limit 20
 ```
 
-## Files (shared library)
-
-```
-~/.ai-pro-skills/reddit/
-├── SKILL.md           # Source (also registered as a copy into the tool)
-├── cli.py
-├── action.py
-├── _skill_home.py
-├── requirements.txt
-├── .env.example
-├── .env               # local secrets — never commit
-└── .gitignore
-```
-
 ## Notes
 
 - Prefer research/read flows; treat submit/reply/vote as high-impact.
 - Strip `r/` / `u/` prefixes before passing names to the CLI.
-- Never commit `.env`. Keep secrets out of chat logs when possible.
+- Never commit `.env`. One Reddit account per workspace is the intended setup.
+- Path helper: shared [`common/skill_home.py`](../common/skill_home.py) (thin wrapper in `_skill_home.py`).

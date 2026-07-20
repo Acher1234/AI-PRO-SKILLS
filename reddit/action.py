@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from _skill_home import display_skill_home, env_path
+from _skill_home import display_env_path, display_skill_home, env_path
 
-CREDENTIALS_PATH = env_path()
+CREDENTIALS_PATH = env_path()  # resolved at import; prefer env_path() at call time
 REQUIRED_KEYS = (
     "REDDIT_CLIENT_ID",
     "REDDIT_CLIENT_SECRET",
@@ -34,16 +34,18 @@ class RedditClient:
         self._creds = self._load_credentials()
 
     def _load_credentials(self) -> dict:
-        """Load credentials from skill-dir ``.env`` (KEY=VALUE lines)."""
-        if not CREDENTIALS_PATH.exists():
+        """Load credentials from the resolved per-workspace ``.env``."""
+        path = env_path()
+        if not path.exists():
             raise FileNotFoundError(
-                f"Credentials not found at {CREDENTIALS_PATH}. "
-                f"Create {display_skill_home()}/.env from .env.example with "
+                f"Credentials not found at {path}. "
+                f"Create {display_env_path()} from the skill's .env.example "
+                f"(CLI library: {display_skill_home()}) with "
                 + ", ".join(REQUIRED_KEYS)
             )
 
         creds: dict[str, str] = {}
-        for line in CREDENTIALS_PATH.read_text(encoding="utf-8").splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -58,7 +60,7 @@ class RedditClient:
         missing = [k for k in REQUIRED_KEYS if not creds.get(k)]
         if missing:
             raise ValueError(
-                f"Missing keys in {CREDENTIALS_PATH}: {', '.join(missing)}"
+                f"Missing keys in {path}: {', '.join(missing)}"
             )
         return creds
 

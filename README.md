@@ -33,16 +33,19 @@ machine. On **ne re-clone pas** et on **ne réinstalle pas** les dépendances à
 ```
 ~/.ai-pro-skills/        librairie partagée ($AI_SKILLS_HOME)
 ├── install.sh           le méta-installeur (piloté par /ai-pro-skills)
+├── common/              helpers partagés (skill_home: lib shared + .env par workspace)
 ├── ext/<repo>/          skills git externes, clonés UNE FOIS
 ├── .venv/               venv Python partagé (tous les skills python)
-└── <skills>/            coolify, zscaler, agent-browser, SF, jira, …
+└── <skills>/            coolify, zscaler, reddit, jira, …
 
 npm i -g <pkg>           CLIs node globaux partagés (agent-browser, …)
 
-        │ on ne copie QUE le SKILL.md vers chaque outil ↓
-~/.cursor/skills/<name>/SKILL.md     ~/.claude/skills/<name>/SKILL.md
-~/.hermes/skills/<name>/SKILL.md     ~/.openclaw/skills/<name>/SKILL.md
+        │ register = cp ONLY SKILL.md ; secrets (.env) à côté du skill enregistré ↓
+~/.cursor/skills/<name>/SKILL.md + .env     (ou ./.cursor/skills/<name>/ pour un projet)
 ```
+
+**Modèle hybride :** le code CLI est **shared** ; le `.env` / tokens sont **par workspace**
+(résolus via `common/skill_home.py`) pour permettre plusieurs comptes (Reddit, Jira, …).
 
 ## 🚀 Installation
 
