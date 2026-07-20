@@ -142,12 +142,30 @@ Global: `confluence --profile staging <command>`.
 Accept numeric IDs or Confluence URLs (`?pageId=`, `/pages/<id>/…`). Prefer ID or
 `/pages/<id>` over `/display/<space>/<title>`.
 
+## List all pages in a space
+
+**Do not** paginate with `confluence search … --start N` (or `content/search?…&start=N`)
+on Confluence Cloud — the offset is often ignored → same page of results forever →
+infinite loops / huge delays.
+
+Use the content list API and bump `start` while `len(results) == limit`:
+
+```bash
+confluence api "content?spaceKey=KEY&type=page&limit=50&start=0"
+confluence api "content?spaceKey=KEY&type=page&limit=50&start=50"
+# … until fewer than 50 results
+```
+
+If you must use `content/search`, follow `_links.next` (cursor), never a bare `start`.
+
 ## Agent tips
 
 - Destructive commands: always pass `--yes`.
 - Prefer `--format markdown` for agent text; `--format json` for parsing.
 - Read-only agents: `CONFLUENCE_READ_ONLY=true` in the workspace `.env`.
 - Folders have no body — use `info`, not `read`/`edit`.
+- **Never** use `confluence search --start` to crawl a whole space — see
+  [List all pages in a space](#list-all-pages-in-a-space).
 - Full reference: `confluence --help` / [confluence-cli](https://www.npmjs.com/package/confluence-cli).
 
 ## Files
