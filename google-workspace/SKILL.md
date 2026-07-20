@@ -26,12 +26,15 @@ Prefer (in order):
 
 Always `cd` into the working directory before running scripts. Use relative paths: `python scripts/setup.py`, `python scripts/google_api.py`.
 
-OAuth files are stored under Hermes home (not in the skill folder):
+OAuth files are stored **next to `SKILL.md`** (same folder as the installed skill — like `config.json` for zscaler):
 
 | File | Path |
 |------|------|
-| Token | `${HERMES_HOME:-$HOME/.hermes}/google_token.json` |
-| Client secret | `${HERMES_HOME:-$HOME/.hermes}/google_client_secret.json` |
+| Token | `<skill-dir>/google_token.json` |
+| Client secret | `<skill-dir>/google_client_secret.json` |
+| Pending OAuth | `<skill-dir>/google_oauth_pending.json` |
+
+Examples: `~/.cursor/skills/google-workspace/google_token.json`, or under Hermes `…/skills/productivity/google-workspace/google_token.json`.
 
 ## Slash commands
 
@@ -112,5 +115,5 @@ Gmail search operators: see local `references/gmail-search-syntax.md` in this sk
 - Confirm with the user before **send/reply**, **calendar create/delete**, **Drive share/delete**, or **Sheets/Docs write**.
 - Calendar times must be ISO 8601 with timezone offset or `Z`.
 - Prefer trash (`drive delete`) over `--permanent`.
-- Optional: if `gws` is on `PATH`, `google_api.py` may use it; same token file under Hermes home.
-- Never commit `google_token.json` / `google_client_secret.json`.
+- Optional: if `gws` is on `PATH`, `google_api.py` may use it; same token file next to `SKILL.md`.
+- Never commit `google_token.json` / `google_client_secret.json` / `google_oauth_pending.json`.
